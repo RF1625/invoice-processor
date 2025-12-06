@@ -1,0 +1,181 @@
+import { prisma } from "./prisma";
+import { type NavPurchaseInvoicePayload } from "./navClient";
+import { type MatchType, type VendorRule } from "./generated/prisma/client";
+
+export type ParsedInvoiceItem = {
+  description: string | null;
+  quantity: number | null;
+  unitPrice: number | null;
+  amount: number | null;
+  glAccountNo?: string | null;
+  dimensions?: Record<string, string>;
+};
+
+export type ParsedInvoice = {
+  vendorName: string | null;
+  vendorAddress: string | null;
+  gstNumber?: string | null;
+  customerName: string | null;
+  customerAddress: string | null;
+  invoiceId: string | null;
+  invoiceDate: string | null;
+  dueDate: string | null;
+  subTotal?: number | null;
+  taxAmount?: number | null;
+  taxRate?: number | null;
+  amountDue?: number | null;
+  invoiceTotal: number | null;
+  currencyCode?: string | null;
+  bankAccount?: string | null;
+  paymentTerms?: string | null;
+  items: ParsedInvoiceItem[];
+  confidence?: number;
+  pageRange?: number[];
+  navVendorNo?: string | null;
+};
+
+export type RuleApplication = {
+  lineIndex: number;
+  ruleId?: string | null;
+  matchType?: MatchType | null;
+  matchValue?: string | null;
+  glAccountNo?: string | null;
+  dimensions?: Record<string, string>;
+  matched: boolean;
+  note?: string;
+};
+
+const parseTokens = (raw: string | null | undefined) =>
+  (raw ?? "")
+    .split(/[,\n]/)
+    .map((t) => t.trim())
+    .filter(Boolean);
+
+const matchesRule = (rule: VendorRule, description: string, amount: number | null | undefined) => {
+  if (!rule.active) return false;
+  const normalized = description.toLowerCase();
+
+  switch (rule.matchType) {
+    case "description_contains": {
+      const tokens = parseTokens(rule.matchValue);
+      return tokens.some((token) => normalized.includes(token.toLowerCase()));
+    }
+    case "description_regex": {
+      if (!rule.matchValue) return false;
+      try {
+        const regex = new RegExp(rule.matchValue, "i");
+        return regex.test(description);
+      } catch (err) {
+        console.warn("Invalid regex in rule", rule.id, err);
+        return false;
+      }
+    }
+    case "amount_equals": {
+      if (amount == null) return false;
+      const target = rule.matchValue ? Number(rule.matchValue) : NaN;
+      if (Number.isNaN(target)) return false;
+      return Math.abs(amount - target) < 0.0001;
+    }
+    case "always":
+      return true;
+    default:
+      return false;
+  }
+};
+
+export async function applyVendorRulesAndLog(params: {
+  invoice: ParsedInvoice;
+  navVendorNo?: string | null;
+  fileName?: string | null;
+}): Promise<{
+  invoice: ParsedInvoice;
+  navPayload: NavPurchaseInvoicePayload | null;
+  ruleApplications: RuleApplication[];
+}> {
+  const { invoice, navVendorNo, fileName } = params;
+
+  const vendor =
+    navVendorNo != null
+      ? await prisma.vendor.findUnique({
+          where: { vendorNo: navVendorNo },
+          include: { rules: { where: { active: true }, orderBy: { priority: "asc" } } },
+        })
+      : invoice.vendorName
+        ? await prisma.vendor.findFirst({
+            where: { name: { equals: invoice.vendorName, mode: "insensitive" } },
+            include: { rules: { where: { active: true }, orderBy: { priority: "asc" } } },
+          })
+        : null;
+
+  const resolvedVendorNo = vendor?.vendorNo ?? navVendorNo ?? null;
+  const defaultDims = (vendor?.defaultDimensions as Record<string, string> | null) ?? {};
+  const rules = vendor?.rules ?? [];
+
+  const ruleApplications: RuleApplication[] = [];
+  const itemsWithAssignments = invoice.items.map((item, idx) => {
+    const description = item.description ?? "";
+    const amount = item.amount ?? item.unitPrice ?? null;
+    const rule = rules.find((r) => matchesRule(r, description, amount));
+    const mergedDims = {
+      ...defaultDims,
+      ...(rule?.dimensionOverrides as Record<string, string> | null | undefined),
+      ...(item.dimensions ?? {}),
+    };
+    const glAccountNo = rule?.glAccountNo ?? item.glAccountNo ?? null;
+
+    ruleApplications.push({
+      lineIndex: idx,
+      ruleId: rule?.id ?? null,
+      matchType: rule?.matchType ?? null,
+      matchValue: rule?.matchValue ?? null,
+      glAccountNo,
+      dimensions: Object.keys(mergedDims).length ? mergedDims : undefined,
+      matched: Boolean(rule),
+      note: rule?.comment ?? undefined,
+    });
+
+    return {
+      ...item,
+      glAccountNo,
+      dimensions: Object.keys(mergedDims).length ? mergedDims : undefined,
+    };
+  });
+
+  const navPayload: NavPurchaseInvoicePayload | null = resolvedVendorNo
+    ? {
+        vendorNo: resolvedVendorNo,
+        vendorInvoiceNo: invoice.invoiceId ?? undefined,
+        postingDate: invoice.invoiceDate ?? undefined,
+        dueDate: invoice.dueDate ?? undefined,
+        currencyCode: invoice.currencyCode ?? vendor?.defaultCurrency ?? undefined,
+        dimensions: Object.keys(defaultDims).length ? defaultDims : undefined,
+        lines: itemsWithAssignments.map((line) => ({
+          description: line.description ?? "Unspecified",
+          quantity: line.quantity ?? 0,
+          directUnitCost: line.unitPrice ?? line.amount ?? 0,
+          amount: line.amount ?? 0,
+          glAccountNo: line.glAccountNo ?? "UNMAPPED",
+          dimensions: line.dimensions,
+        })),
+      }
+    : null;
+
+  await prisma.run.create({
+    data: {
+      vendorId: vendor?.id ?? null,
+      vendorNo: resolvedVendorNo,
+      fileName: fileName ?? null,
+      status: navPayload ? "processed" : "missing_vendor",
+      error: navPayload ? null : "Vendor not found for rule application",
+      invoicePayload: invoice as Record<string, unknown>,
+      ruleApplications,
+      navPayload: navPayload as Record<string, unknown> | null,
+    },
+  });
+
+  return {
+    invoice: { ...invoice, navVendorNo: resolvedVendorNo, items: itemsWithAssignments },
+    navPayload,
+    ruleApplications,
+  };
+}

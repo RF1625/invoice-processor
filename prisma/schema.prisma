@@ -1,0 +1,97 @@
+generator client_js {
+  provider = "prisma-client-js"
+}
+
+generator client {
+  provider = "prisma-client"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum MatchType {
+  description_contains
+  description_regex
+  amount_equals
+  always
+
+  @@map("match_type")
+}
+
+model Vendor {
+  id                 String      @id @default(dbgenerated("(md5(random()::text || clock_timestamp()::text))::uuid")) @db.Uuid
+  vendorNo           String      @map("vendor_no")
+  name               String
+  gstNumber          String?     @map("gst_number")
+  defaultDimensions  Json?       @map("default_dimensions")
+  defaultCurrency    String?     @map("default_currency")
+  active             Boolean     @default(true)
+  createdAt          DateTime    @default(now()) @map("created_at")
+  updatedAt          DateTime    @default(now()) @updatedAt @map("updated_at")
+  rules              VendorRule[]
+  runs               Run[]
+
+  @@unique([vendorNo])
+  @@map("vendors")
+}
+
+model GlAccount {
+  id        String   @id @default(dbgenerated("(md5(random()::text || clock_timestamp()::text))::uuid")) @db.Uuid
+  no        String   @unique @map("no")
+  name      String
+  type      String?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@map("gl_accounts")
+}
+
+model Dimension {
+  id        String   @id @default(dbgenerated("(md5(random()::text || clock_timestamp()::text))::uuid")) @db.Uuid
+  code      String
+  valueCode String   @map("value_code")
+  valueName String   @map("value_name")
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@unique([code, valueCode])
+  @@map("dimensions")
+}
+
+model VendorRule {
+  id                 String    @id @default(dbgenerated("(md5(random()::text || clock_timestamp()::text))::uuid")) @db.Uuid
+  vendorId           String    @map("vendor_id") @db.Uuid
+  vendor             Vendor    @relation(fields: [vendorId], references: [id])
+  priority           Int       @default(100)
+  matchType          MatchType @map("match_type")
+  matchValue         String?   @map("match_value")
+  glAccountNo        String?   @map("gl_account_no")
+  dimensionOverrides Json      @default(dbgenerated("'{}'::jsonb")) @map("dimension_overrides")
+  active             Boolean   @default(true)
+  comment            String?
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @default(now()) @updatedAt @map("updated_at")
+
+  @@index([vendorId, priority])
+  @@map("vendor_rules")
+}
+
+model Run {
+  id               String   @id @default(dbgenerated("(md5(random()::text || clock_timestamp()::text))::uuid")) @db.Uuid
+  vendorId         String?  @map("vendor_id") @db.Uuid
+  vendor           Vendor?  @relation(fields: [vendorId], references: [id])
+  vendorNo         String?  @map("vendor_no")
+  fileName         String?  @map("file_name")
+  status           String   @default("processed")
+  error            String?
+  invoicePayload   Json?    @map("invoice_payload")
+  ruleApplications Json?    @map("rule_applications")
+  navPayload       Json?    @map("nav_payload")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  @@map("runs")
+}
