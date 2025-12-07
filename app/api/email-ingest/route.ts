@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { ImapFlow, type FetchMessageObject, type MessageStructureObject } from "imapflow";
+import {
+  ImapFlow,
+  type FetchMessageObject,
+  type MessageAddressObject,
+  type MessageStructureObject,
+} from "imapflow";
 import { analyzeInvoiceBuffer, MAX_INVOICE_FILE_BYTES } from "@/lib/invoiceAnalyzer";
 
 export const runtime = "nodejs";
@@ -22,15 +27,19 @@ const maxMessagesValue = Number(process.env.EMAIL_MAX_MESSAGES ?? 10);
 const maxMessages = Number.isFinite(maxMessagesValue) ? maxMessagesValue : 10;
 const requireToken = process.env.EMAIL_INGEST_TOKEN;
 
+type DetailedAddress = MessageAddressObject & { mailbox?: string; host?: string };
+type DetailedStructure = MessageStructureObject & { subtype?: string };
+
 const normalizeAddresses = (envelope?: FetchMessageObject["envelope"]) => {
-  const fromList = envelope?.from ?? [];
+  const fromList: DetailedAddress[] = (envelope?.from ?? []) as DetailedAddress[];
+
   return fromList
     .map((addr) => {
-      if (typeof addr === "string") return addr.toLowerCase();
-      const address = "address" in addr ? addr.address : `${addr.mailbox}@${addr.host}`;
+      const address =
+        addr.address ?? (addr.mailbox && addr.host ? `${addr.mailbox}@${addr.host}` : undefined);
       return address?.toLowerCase();
     })
-    .filter(Boolean) as string[];
+    .filter((addr): addr is string => Boolean(addr));
 };
 
 const subjectMatches = (subject: string) =>
@@ -46,20 +55,22 @@ const shouldProcessMessage = (message: FetchMessageObject) => {
   return senderAllowed && subjectMatches(subject);
 };
 
-const collectPdfAttachments = (node: MessageStructureObject | undefined): Attachment[] => {
+const collectPdfAttachments = (node: DetailedStructure | undefined): Attachment[] => {
   const results: Attachment[] = [];
-  const visit = (part: MessageStructureObject | undefined) => {
+  const visit = (part: DetailedStructure | undefined) => {
     if (!part) return;
     const disposition = (part.disposition ?? "").toLowerCase();
-    const filename = part.dispositionParameters?.filename || part.parameters?.name || part.id || `attachment-${part.part}.pdf`;
+    const filename =
+      part.dispositionParameters?.filename || part.parameters?.name || part.id || `attachment-${part.part}.pdf`;
     const isPdfType =
       part.type?.toLowerCase() === "application" && part.subtype?.toLowerCase() === "pdf";
     const isPdfName = typeof filename === "string" && filename.toLowerCase().endsWith(".pdf");
-    if (disposition === "attachment" && (isPdfType || isPdfName)) {
-      results.push({ part: part.part, filename, size: part.size });
+    if (disposition === "attachment" && (isPdfType || isPdfName) && part.part) {
+      const safeFilename = typeof filename === "string" ? filename : `attachment-${part.part}.pdf`;
+      results.push({ part: part.part, filename: safeFilename, size: part.size });
     }
     for (const child of part.childNodes ?? []) {
-      visit(child);
+      visit(child as DetailedStructure);
     }
   };
   visit(node);

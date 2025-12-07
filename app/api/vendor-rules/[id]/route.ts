@@ -9,7 +9,7 @@ const parseJson = (raw: unknown) => {
   return {};
 };
 
-export async function PUT(req: NextRequest, context: { params: { id: string } }) {
+export async function PUT(req: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
     const params = await context.params;
     const body = await req.json();
@@ -34,7 +34,7 @@ export async function PUT(req: NextRequest, context: { params: { id: string } })
   }
 }
 
-export async function DELETE(_req: NextRequest, context: { params: { id: string } }) {
+export async function DELETE(_req: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
     const params = await context.params;
     await prisma.vendorRule.delete({ where: { id: params.id } });

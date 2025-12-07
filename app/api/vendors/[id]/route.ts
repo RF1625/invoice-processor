@@ -9,14 +9,14 @@ const parseJson = (raw: unknown) => {
   return {};
 };
 
-export async function GET(_req: NextRequest, context: { params: { id: string } }) {
+export async function GET(_req: NextRequest, context: { params: Promise<{ id: string }> }) {
   const params = await context.params;
   const vendor = await prisma.vendor.findUnique({ where: { id: params.id } });
   if (!vendor) return NextResponse.json({ error: "Vendor not found" }, { status: 404 });
   return NextResponse.json({ vendor }, { status: 200 });
 }
 
-export async function PUT(req: NextRequest, context: { params: { id: string } }) {
+export async function PUT(req: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
     const params = await context.params;
     const body = await req.json();
@@ -38,7 +38,7 @@ export async function PUT(req: NextRequest, context: { params: { id: string } })
   }
 }
 
-export async function DELETE(_req: NextRequest, context: { params: { id: string } }) {
+export async function DELETE(_req: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
     const params = await context.params;
     await prisma.vendor.delete({ where: { id: params.id } });

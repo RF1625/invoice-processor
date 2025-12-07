@@ -6,7 +6,7 @@ type RunRecord = {
   id: string;
   status: string;
   fileName: string | null;
-  vendor?: { name: string | null } | null;
+  vendor?: { name: string | null; vendorNo?: string | null } | null;
   vendorNo?: string | null;
   navVendorNo?: string | null;
   createdAt: Date;
@@ -16,7 +16,7 @@ type RunRecord = {
   ruleApplications?: unknown;
 };
 
-export async function GET(_req: NextRequest, context: { params: { id: string } }) {
+export async function GET(_req: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
     const params = await context.params;
     const primary = (prisma as unknown as { run?: unknown }).run;

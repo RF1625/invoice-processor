@@ -1,6 +1,6 @@
+import { Prisma, type MatchType, type VendorRule } from "@prisma/client";
 import { prisma } from "./prisma";
 import { type NavPurchaseInvoicePayload } from "./navClient";
-import { type MatchType, type VendorRule } from "./generated/prisma/client";
 
 export type ParsedInvoiceItem = {
   description: string | null;
@@ -160,6 +160,12 @@ export async function applyVendorRulesAndLog(params: {
       }
     : null;
 
+  const invoicePayloadJson: Prisma.InputJsonValue = invoice as Prisma.InputJsonValue;
+  const ruleApplicationsJson: Prisma.InputJsonValue = ruleApplications as Prisma.InputJsonValue;
+  const navPayloadJson: Prisma.InputJsonValue | undefined = navPayload
+    ? (navPayload as Prisma.InputJsonValue)
+    : undefined;
+
   await prisma.run.create({
     data: {
       vendorId: vendor?.id ?? null,
@@ -167,9 +173,9 @@ export async function applyVendorRulesAndLog(params: {
       fileName: fileName ?? null,
       status: navPayload ? "processed" : "missing_vendor",
       error: navPayload ? null : "Vendor not found for rule application",
-      invoicePayload: invoice as Record<string, unknown>,
-      ruleApplications,
-      navPayload: navPayload as Record<string, unknown> | null,
+      invoicePayload: invoicePayloadJson,
+      ruleApplications: ruleApplicationsJson,
+      navPayload: navPayloadJson,
     },
   });
 
