@@ -41,6 +41,7 @@ model Firm {
   navPostLogs NavPostLog[]
   invoiceApprovals InvoiceApproval[]
   invitations InvitationToken[]
+  mailboxes  Mailbox[]
 
   @@unique([code])
   @@map("firms")
@@ -69,6 +70,7 @@ model User {
   invoiceCreated Invoice[] @relation("InvoiceCreatedBy")
   invoiceUpdated Invoice[] @relation("InvoiceUpdatedBy")
   invoiceApprovals InvoiceApproval[]
+  mailboxes       Mailbox[]
   createdAt      DateTime          @default(now()) @map("created_at")
   updatedAt      DateTime          @default(now()) @updatedAt @map("updated_at")
 
@@ -352,4 +354,32 @@ model NavPostLog {
 
   @@index([firmId, invoiceId])
   @@map("nav_post_logs")
+}
+
+model Mailbox {
+  id               String   @id @default(dbgenerated("(md5(random()::text || clock_timestamp()::text))::uuid")) @db.Uuid
+  userId           String?  @map("user_id") @db.Uuid
+  user             User?    @relation(fields: [userId], references: [id])
+  firmId           String   @map("firm_id") @db.Uuid
+  firm             Firm     @relation(fields: [firmId], references: [id])
+  provider         String
+  imapHost         String?  @map("imap_host")
+  imapPort         Int?     @map("imap_port")
+  imapTls          Boolean  @default(true) @map("imap_tls")
+  imapUser         String?  @map("imap_user")
+  encryptedSecret  String?  @map("encrypted_secret")
+  allowedSenders   String?  @map("allowed_senders")
+  subjectKeywords  String?  @map("subject_keywords")
+  sourceMailbox    String?  @map("source_mailbox")
+  processedMailbox String?  @map("processed_mailbox")
+  lastSeenUid      BigInt?  @map("last_seen_uid")
+  maxMessages      Int?     @default(10) @map("max_messages")
+  active           Boolean  @default(true)
+  lastRunAt        DateTime? @map("last_run_at")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@index([firmId])
+  @@index([userId])
+  @@map("mailboxes")
 }

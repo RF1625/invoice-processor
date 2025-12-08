@@ -1,0 +1,424 @@
+"use client";
+
+import Link from "next/link";
+import { Suspense, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
+
+const DEFAULT_MAX_MESSAGES = 10;
+const DEFAULT_SUBJECT_KEYWORDS = ["invoice", "bill", "payment", "statement"];
+
+type MailboxRow = {
+  id: string;
+  provider: string;
+  imapHost?: string | null;
+  imapPort?: number | null;
+  imapTls?: boolean | null;
+  imapUser?: string | null;
+  allowedSenders?: string | null;
+  subjectKeywords?: string | null;
+  sourceMailbox?: string | null;
+  processedMailbox?: string | null;
+  maxMessages?: number | null;
+  active: boolean;
+  lastRunAt?: string | null;
+  lastSeenUid?: number | null;
+  hasSecret?: boolean;
+};
+
+const defaultKeywords = DEFAULT_SUBJECT_KEYWORDS.join(",");
+
+export default function ConnectInboxPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-sm text-slate-600">Loading inbox settings...</div>}>
+      <InboxContent />
+    </Suspense>
+  );
+}
+
+function InboxContent() {
+  const searchParams = useSearchParams();
+  const [mailboxes, setMailboxes] = useState<MailboxRow[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [testingId, setTestingId] = useState<string | null>(null);
+  const [ingestingId, setIngestingId] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  const [form, setForm] = useState({
+    host: "",
+    port: "993",
+    tls: true,
+    user: "",
+    password: "",
+    allowedSenders: "",
+    subjectKeywords: defaultKeywords,
+    sourceMailbox: "INBOX",
+    processedMailbox: "",
+    maxMessages: DEFAULT_MAX_MESSAGES.toString(),
+  });
+
+  useEffect(() => {
+    const connected = searchParams.get("connected");
+    const oauthError = searchParams.get("error");
+    const provider = searchParams.get("provider") ?? connected ?? "";
+    if (connected) {
+      setMessage(`${capitalize(provider)} inbox connected`);
+    }
+    if (oauthError) {
+      setError(`OAuth failed: ${oauthError}`);
+    }
+  }, [searchParams]);
+
+  const loadMailboxes = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/mailboxes", { cache: "no-store" });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Failed to load mailboxes");
+      setMailboxes(json.mailboxes ?? []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load mailboxes");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadMailboxes().catch(() => {});
+  }, []);
+
+  const handleOAuth = (provider: "google" | "outlook") => {
+    setMessage(null);
+    setError(null);
+    window.location.href = `/api/mailboxes/oauth/${provider}/start`;
+  };
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    setMessage(null);
+    setError(null);
+    try {
+      const payload = {
+        provider: "imap",
+        imapHost: form.host,
+        imapPort: form.port ? Number(form.port) : null,
+        imapTls: form.tls,
+        imapUser: form.user,
+        secret: form.password,
+        allowedSenders: form.allowedSenders || null,
+        subjectKeywords: form.subjectKeywords || null,
+        sourceMailbox: form.sourceMailbox || "INBOX",
+        processedMailbox: form.processedMailbox || null,
+        maxMessages: form.maxMessages ? Number(form.maxMessages) : null,
+      };
+      const res = await fetch("/api/mailboxes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Failed to save mailbox");
+      setMessage("Custom IMAP inbox saved. Test it below.");
+      setForm((prev) => ({ ...prev, password: "" }));
+      await loadMailboxes();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save mailbox");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleTest = async (id: string) => {
+    setTestingId(id);
+    setMessage(null);
+    setError(null);
+    try {
+      const res = await fetch(`/api/mailboxes/${id}/test`, { method: "POST" });
+      const json = await res.json();
+      if (!res.ok || !json.ok) {
+        throw new Error(json.error ?? "Mailbox test failed");
+      }
+      const attachmentCount = json.previews?.[0]?.pdfAttachments?.length ?? 0;
+      setMessage(`Test succeeded - first unseen message has ${attachmentCount} PDF attachment(s)`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Mailbox test failed");
+    } finally {
+      setTestingId(null);
+    }
+  };
+
+  const handleIngest = async (id: string) => {
+    setIngestingId(id);
+    setMessage(null);
+    setError(null);
+    try {
+      const res = await fetch(`/api/mailboxes/${id}/ingest`, { method: "POST" });
+      const json = await res.json();
+      if (!res.ok || json.error) {
+        throw new Error(json.error ?? "Ingest failed");
+      }
+      setMessage(
+        `Ingest complete - processed ${json.processedCount ?? json.processed?.length ?? 0} attachment(s)`,
+      );
+      await loadMailboxes();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Ingest failed");
+    } finally {
+      setIngestingId(null);
+    }
+  };
+
+  const sortedMailboxes = useMemo(
+    () =>
+      [...mailboxes].sort((a, b) => (b.lastRunAt ?? "").localeCompare(a.lastRunAt ?? "")),
+    [mailboxes],
+  );
+
+  return (
+    <main className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-200 p-8 text-slate-900">
+      <div className="mx-auto max-w-5xl space-y-8">
+        <header className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <p className="text-sm uppercase tracking-wide text-slate-500">Settings</p>
+            <h1 className="text-3xl font-semibold">Connect inbox</h1>
+            <p className="text-sm text-slate-600">
+              Link an email inbox so invoices are pulled automatically.
+            </p>
+          </div>
+          <Link
+            href="/"
+            className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50"
+          >
+            Back to app
+          </Link>
+        </header>
+
+        {(message || error) && (
+          <div
+            className={`rounded-xl border px-4 py-3 text-sm shadow-sm ${
+              error
+                ? "border-red-200 bg-red-50 text-red-800"
+                : "border-emerald-200 bg-emerald-50 text-emerald-800"
+            }`}
+          >
+            {error ?? message}
+          </div>
+        )}
+
+        <section className="grid gap-6 lg:grid-cols-2">
+          <div className="rounded-2xl bg-white p-6 shadow-md ring-1 ring-slate-100">
+            <h2 className="text-xl font-semibold text-slate-900">Option A: OAuth (recommended)</h2>
+            <p className="mt-1 text-sm text-slate-600">
+              We use OAuth to get an IMAP refresh token - no passwords stored. Works best for Google Workspace and Microsoft 365.
+            </p>
+            <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+              <button
+                type="button"
+                onClick={() => handleOAuth("google")}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-3 text-sm font-semibold text-white shadow-md transition hover:bg-slate-800 sm:w-auto"
+              >
+                <span className="h-2 w-2 rounded-full bg-emerald-400" />
+                Connect Google
+              </button>
+              <button
+                type="button"
+                onClick={() => handleOAuth("outlook")}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm transition hover:bg-slate-50 sm:w-auto"
+              >
+                <span className="h-2 w-2 rounded-full bg-blue-500" />
+                Connect Outlook
+              </button>
+            </div>
+            <ul className="mt-4 list-disc space-y-1 pl-5 text-sm text-slate-600">
+              <li>We request IMAP + email scopes only.</li>
+              <li>Inbox is limited by sender/subject filters you can adjust later.</li>
+              <li>After approving, you&apos;ll land back here with the inbox listed below.</li>
+            </ul>
+          </div>
+
+          <form
+            onSubmit={handleSave}
+            className="space-y-4 rounded-2xl bg-white p-6 shadow-md ring-1 ring-slate-100"
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-semibold text-slate-900">Option B: Custom IMAP</h2>
+                <p className="text-sm text-slate-600">Use an app password or IMAP credential.</p>
+              </div>
+              <button
+                type="submit"
+                disabled={saving}
+                className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
+              >
+                {saving ? "Saving..." : "Save inbox"}
+              </button>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <LabeledInput
+                label="IMAP host"
+                value={form.host}
+                onChange={(e) => setForm((f) => ({ ...f, host: e.target.value }))}
+                placeholder="imap.mailprovider.com"
+                required
+              />
+              <LabeledInput
+                label="Port"
+                value={form.port}
+                onChange={(e) => setForm((f) => ({ ...f, port: e.target.value }))}
+                placeholder="993"
+                required
+              />
+              <LabeledInput
+                label="Username"
+                value={form.user}
+                onChange={(e) => setForm((f) => ({ ...f, user: e.target.value }))}
+                placeholder="user@example.com"
+                required
+              />
+              <LabeledInput
+                label="App password / IMAP password"
+                type="password"
+                value={form.password}
+                onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
+                required
+              />
+              <div className="flex items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-3">
+                <input
+                  id="imap-tls"
+                  type="checkbox"
+                  checked={form.tls}
+                  onChange={(e) => setForm((f) => ({ ...f, tls: e.target.checked }))}
+                  className="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900"
+                />
+                <label htmlFor="imap-tls" className="text-sm text-slate-700">
+                  Require TLS
+                </label>
+              </div>
+              <LabeledInput
+                label="Allowed senders (comma separated)"
+                value={form.allowedSenders}
+                onChange={(e) => setForm((f) => ({ ...f, allowedSenders: e.target.value }))}
+                placeholder="invoices@vendor.com,accounts@partner.com"
+              />
+              <LabeledInput
+                label="Subject keywords"
+                value={form.subjectKeywords}
+                onChange={(e) => setForm((f) => ({ ...f, subjectKeywords: e.target.value }))}
+                placeholder={defaultKeywords}
+              />
+              <LabeledInput
+                label="Source mailbox"
+                value={form.sourceMailbox}
+                onChange={(e) => setForm((f) => ({ ...f, sourceMailbox: e.target.value }))}
+                placeholder="INBOX"
+              />
+              <LabeledInput
+                label="Processed mailbox (optional)"
+                value={form.processedMailbox}
+                onChange={(e) => setForm((f) => ({ ...f, processedMailbox: e.target.value }))}
+                placeholder="Processed"
+              />
+              <LabeledInput
+                label="Max messages per run"
+                value={form.maxMessages}
+                onChange={(e) => setForm((f) => ({ ...f, maxMessages: e.target.value }))}
+                placeholder="10"
+              />
+            </div>
+            <p className="text-xs text-slate-500">Save, then test the connection from the list below.</p>
+          </form>
+        </section>
+
+        <section className="rounded-2xl bg-white p-6 shadow-md ring-1 ring-slate-100">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900">Connected inboxes</h2>
+              <p className="text-sm text-slate-600">Run a test or ingest now.</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => loadMailboxes()}
+              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50"
+            >
+              Refresh
+            </button>
+          </div>
+
+          <div className="mt-4 space-y-3">
+            {loading && <p className="text-sm text-slate-600">Loading mailboxes...</p>}
+            {!loading && sortedMailboxes.length === 0 && (
+              <p className="text-sm text-slate-600">No inboxes connected yet.</p>
+            )}
+            {sortedMailboxes.map((mailbox) => (
+              <div
+                key={mailbox.id}
+                className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-4 sm:flex-row sm:items-center sm:justify-between"
+              >
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                    <span className="rounded-full bg-white px-2 py-1 text-xs font-medium uppercase text-slate-700">
+                      {mailbox.provider}
+                    </span>
+                    <span>{mailbox.imapUser ?? "(no username)"}</span>
+                    {!mailbox.active && (
+                      <span className="rounded-full bg-amber-100 px-2 py-1 text-xs font-medium text-amber-800">
+                        inactive
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-sm text-slate-600">
+                    Host: {mailbox.imapHost ?? "-"} | Mailbox: {mailbox.sourceMailbox ?? "INBOX"} | Max:{" "}
+                    {mailbox.maxMessages ?? DEFAULT_MAX_MESSAGES}
+                  </p>
+                  <p className="text-xs text-slate-500">
+                    Last run: {mailbox.lastRunAt ? new Date(mailbox.lastRunAt).toLocaleString() : "never"} | Last seen UID:{" "}
+                    {mailbox.lastSeenUid ?? "-"}
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleTest(mailbox.id)}
+                    disabled={testingId === mailbox.id}
+                    className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-800 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-100"
+                  >
+                    {testingId === mailbox.id ? "Testing..." : "Test connection"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleIngest(mailbox.id)}
+                    disabled={ingestingId === mailbox.id}
+                    className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
+                  >
+                    {ingestingId === mailbox.id ? "Ingesting..." : "Run ingest now"}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      </div>
+    </main>
+  );
+}
+
+function LabeledInput({
+  label,
+  ...props
+}: React.InputHTMLAttributes<HTMLInputElement> & { label: string }) {
+  return (
+    <label className="flex flex-col gap-1 text-sm font-medium text-slate-700">
+      {label}
+      <input
+        {...props}
+        className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-900/10"
+      />
+    </label>
+  );
+}
+
+const capitalize = (value: string) => value.charAt(0).toUpperCase() + value.slice(1);

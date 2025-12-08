@@ -73,18 +73,23 @@ Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/bui
 
 ## Email invoice ingest
 
-There is a server-side endpoint that polls an IMAP inbox for PDF invoices and runs them through the same Azure Document Intelligence + rule engine flow as manual uploads.
+Mailboxes now live in the database and can be connected from the UI at `/settings/inbox`:
 
-- Endpoint: `POST /api/email-ingest` (optionally add `?token=YOUR_SECRET` when `EMAIL_INGEST_TOKEN` is set).
-- Filtering: only messages whose sender matches `EMAIL_ALLOWED_SENDERS` (comma-separated, optional) **and** whose subject contains any `EMAIL_SUBJECT_KEYWORDS` (default: `invoice,bill,payment,statement`) are considered; attachments must be PDFs and under the 10MB limit.
-- Processing: matching PDF attachments are analyzed and logged as runs; messages are marked `\Seen` and optionally moved to `EMAIL_IMAP_PROCESSED_MAILBOX`.
-- Env vars:
-  - `EMAIL_IMAP_HOST`, `EMAIL_IMAP_PORT` (default 993), `EMAIL_IMAP_TLS` (default true), `EMAIL_IMAP_USER`, `EMAIL_IMAP_PASSWORD`
-  - `EMAIL_IMAP_MAILBOX` (default `INBOX`), `EMAIL_IMAP_PROCESSED_MAILBOX` (optional)
-  - `EMAIL_ALLOWED_SENDERS` (optional comma list), `EMAIL_SUBJECT_KEYWORDS` (comma list), `EMAIL_MAX_MESSAGES` (default 10)
-  - `EMAIL_INGEST_TOKEN` to require a secret token on the endpoint
+- OAuth buttons for Google/Workspace and Outlook/365 (IMAP scope only), plus a manual IMAP form (host/port/TLS/user/password, filters, processed mailbox).
+- `MAILBOX_SECRET_KEY` (32 bytes/hex/base64 or any string) is required to encrypt stored IMAP/OAuth secrets.
+- OAuth env vars (set these for the provider(s) you use):
+  - Google: `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, `GOOGLE_OAUTH_REDIRECT_URI` (defaults to `/api/mailboxes/oauth/google/callback`)
+  - Outlook: `OUTLOOK_OAUTH_CLIENT_ID`, `OUTLOOK_OAUTH_CLIENT_SECRET`, `OUTLOOK_OAUTH_REDIRECT_URI` (defaults to `/api/mailboxes/oauth/outlook/callback`)
+- APIs:
+  - `GET /api/mailboxes` – list mailboxes for the signed-in firm (secrets stripped)
+  - `POST /api/mailboxes` – create/update a mailbox (encrypts secret server-side)
+  - `POST /api/mailboxes/:id/test` – IMAP login + attachment preview (no side effects)
+  - `POST /api/mailboxes/:id/ingest` – run ingest for that mailbox
+  - `POST /api/email-ingest` – runs ingest for all active mailboxes (optionally `?mailboxId=` to target one)
+- Filtering is per-mailbox: allowed senders, subject keywords (default `invoice,bill,payment,statement`), PDF-only, 10MB limit, optional processed mailbox move.
+- `EMAIL_INGEST_TOKEN` still protects the ingest endpoint when set.
 
-Quick test (with server running on localhost and token set):
+Quick ingest test (server running locally and token set):
 
 ```bash
 curl -X POST "http://localhost:3000/api/email-ingest?token=$EMAIL_INGEST_TOKEN"
