@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import crypto from "node:crypto";
 import {
   ImapFlow,
   type FetchMessageObject,
@@ -6,6 +7,7 @@ import {
   type MessageStructureObject,
 } from "imapflow";
 import { analyzeInvoiceBuffer, MAX_INVOICE_FILE_BYTES } from "@/lib/invoiceAnalyzer";
+import { getDefaultFirmId } from "@/lib/tenant";
 
 export const runtime = "nodejs";
 
@@ -120,6 +122,11 @@ export async function POST(req: NextRequest) {
     const skipped: Array<{ uid: number; subject: string; reason: string }> = [];
     let handled = 0;
 
+    const firmId = await getDefaultFirmId();
+    if (!firmId) {
+      return NextResponse.json({ error: "Default firm not configured" }, { status: 500 });
+    }
+
     for await (const message of client.fetch({ seen: false }, { envelope: true, bodyStructure: true })) {
       if (handled >= maxMessages) break;
       handled += 1;
@@ -150,8 +157,18 @@ export async function POST(req: NextRequest) {
 
         try {
           const buffer = await downloadAttachment(client, message.uid, attachment);
+          const checksum = crypto.createHash("sha256").update(buffer).digest("hex");
+          const storagePath = `email-ingest/${mailboxName}/${message.uid}-${attachment.filename}`;
           const { processedInvoice } = await analyzeInvoiceBuffer(buffer, {
             fileName: attachment.filename,
+            firmId,
+            fileMeta: {
+              fileName: attachment.filename,
+              storagePath,
+              sizeBytes: buffer.byteLength,
+              contentType: "application/pdf",
+              checksum,
+            },
           });
 
           processed.push({

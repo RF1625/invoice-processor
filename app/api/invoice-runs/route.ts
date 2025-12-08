@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { Prisma } from "@/lib/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
+import { requireFirmId } from "@/lib/tenant";
 
 type RunRecord = {
   id: string;
@@ -25,6 +26,7 @@ const mapRun = (r: RunRecord) => ({
 
 export async function GET() {
   try {
+    const firmId = await requireFirmId();
     const primary = (prisma as unknown as { run?: unknown }).run;
     const legacy = (prisma as unknown as { invoiceRun?: unknown }).invoiceRun;
     let runs: RunRecord[] = [];
@@ -32,6 +34,7 @@ export async function GET() {
     try {
       if (primary && typeof (primary as { findMany: unknown }).findMany === "function") {
         runs = await (primary as { findMany: (args: unknown) => Promise<RunRecord[]> }).findMany({
+          where: { firmId },
           include: { vendor: true },
           orderBy: { createdAt: "desc" },
           take: 10,

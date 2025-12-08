@@ -125,7 +125,16 @@ const buildInvoiceSummary = (doc: AnalyzedDocument): ParsedInvoice => {
   };
 };
 
-export async function analyzeInvoiceBuffer(buffer: Buffer, opts?: { fileName?: string | null }) {
+export async function analyzeInvoiceBuffer(
+  buffer: Buffer,
+  opts: { fileName?: string | null; firmId: string; fileMeta?: {
+    fileName: string;
+    storagePath?: string;
+    sizeBytes?: number;
+    contentType?: string | null;
+    checksum?: string | null;
+  } },
+) {
   if (buffer.byteLength === 0) {
     throw new Error("Uploaded file is empty");
   }
@@ -147,6 +156,8 @@ export async function analyzeInvoiceBuffer(buffer: Buffer, opts?: { fileName?: s
     invoice,
     navVendorNo: invoice.navVendorNo ?? null,
     fileName: opts?.fileName ?? null,
+    firmId: opts.firmId,
+    fileMeta: opts.fileMeta,
   });
 
   return {

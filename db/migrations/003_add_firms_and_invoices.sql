@@ -16,43 +16,91 @@ SELECT 'Default Firm', 'default'
 WHERE NOT EXISTS (SELECT 1 FROM firms WHERE code = 'default');
 
 -- Vendors scoped by firm
-ALTER TABLE vendors ADD COLUMN firm_id UUID;
+ALTER TABLE vendors ADD COLUMN IF NOT EXISTS firm_id UUID;
 UPDATE vendors SET firm_id = (SELECT id FROM firms WHERE code = 'default') WHERE firm_id IS NULL;
 ALTER TABLE vendors ALTER COLUMN firm_id SET NOT NULL;
-ALTER TABLE vendors ADD CONSTRAINT vendors_firm_fk FOREIGN KEY (firm_id) REFERENCES firms (id) ON DELETE CASCADE;
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'vendors_firm_fk') THEN
+    ALTER TABLE vendors ADD CONSTRAINT vendors_firm_fk FOREIGN KEY (firm_id) REFERENCES firms (id) ON DELETE CASCADE;
+  END IF;
+END
+$$;
 ALTER TABLE vendors DROP CONSTRAINT IF EXISTS vendors_vendor_no_key;
-ALTER TABLE vendors ADD CONSTRAINT vendors_unique_firm_vendor_no UNIQUE (firm_id, vendor_no);
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'vendors_unique_firm_vendor_no') THEN
+    ALTER TABLE vendors ADD CONSTRAINT vendors_unique_firm_vendor_no UNIQUE (firm_id, vendor_no);
+  END IF;
+END
+$$;
 
 -- G/L accounts scoped by firm
-ALTER TABLE gl_accounts ADD COLUMN firm_id UUID;
+ALTER TABLE gl_accounts ADD COLUMN IF NOT EXISTS firm_id UUID;
 UPDATE gl_accounts SET firm_id = (SELECT id FROM firms WHERE code = 'default') WHERE firm_id IS NULL;
 ALTER TABLE gl_accounts ALTER COLUMN firm_id SET NOT NULL;
-ALTER TABLE gl_accounts ADD CONSTRAINT gl_accounts_firm_fk FOREIGN KEY (firm_id) REFERENCES firms (id) ON DELETE CASCADE;
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'gl_accounts_firm_fk') THEN
+    ALTER TABLE gl_accounts ADD CONSTRAINT gl_accounts_firm_fk FOREIGN KEY (firm_id) REFERENCES firms (id) ON DELETE CASCADE;
+  END IF;
+END
+$$;
 ALTER TABLE gl_accounts DROP CONSTRAINT IF EXISTS gl_accounts_no_key;
-ALTER TABLE gl_accounts ADD CONSTRAINT gl_accounts_unique_firm_no UNIQUE (firm_id, no);
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'gl_accounts_unique_firm_no') THEN
+    ALTER TABLE gl_accounts ADD CONSTRAINT gl_accounts_unique_firm_no UNIQUE (firm_id, no);
+  END IF;
+END
+$$;
 
 -- Dimensions scoped by firm
-ALTER TABLE dimensions ADD COLUMN firm_id UUID;
+ALTER TABLE dimensions ADD COLUMN IF NOT EXISTS firm_id UUID;
 UPDATE dimensions SET firm_id = (SELECT id FROM firms WHERE code = 'default') WHERE firm_id IS NULL;
 ALTER TABLE dimensions ALTER COLUMN firm_id SET NOT NULL;
-ALTER TABLE dimensions ADD CONSTRAINT dimensions_firm_fk FOREIGN KEY (firm_id) REFERENCES firms (id) ON DELETE CASCADE;
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'dimensions_firm_fk') THEN
+    ALTER TABLE dimensions ADD CONSTRAINT dimensions_firm_fk FOREIGN KEY (firm_id) REFERENCES firms (id) ON DELETE CASCADE;
+  END IF;
+END
+$$;
 ALTER TABLE dimensions DROP CONSTRAINT IF EXISTS dimensions_code_value_code_key;
-ALTER TABLE dimensions ADD CONSTRAINT dimensions_unique_firm_code_value UNIQUE (firm_id, code, value_code);
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'dimensions_unique_firm_code_value') THEN
+    ALTER TABLE dimensions ADD CONSTRAINT dimensions_unique_firm_code_value UNIQUE (firm_id, code, value_code);
+  END IF;
+END
+$$;
 
 -- Vendor rules scoped by firm
-ALTER TABLE vendor_rules ADD COLUMN firm_id UUID;
+ALTER TABLE vendor_rules ADD COLUMN IF NOT EXISTS firm_id UUID;
 UPDATE vendor_rules vr SET firm_id = v.firm_id FROM vendors v WHERE vr.vendor_id = v.id;
 UPDATE vendor_rules SET firm_id = (SELECT id FROM firms WHERE code = 'default') WHERE firm_id IS NULL;
 ALTER TABLE vendor_rules ALTER COLUMN firm_id SET NOT NULL;
-ALTER TABLE vendor_rules ADD CONSTRAINT vendor_rules_firm_fk FOREIGN KEY (firm_id) REFERENCES firms (id) ON DELETE CASCADE;
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'vendor_rules_firm_fk') THEN
+    ALTER TABLE vendor_rules ADD CONSTRAINT vendor_rules_firm_fk FOREIGN KEY (firm_id) REFERENCES firms (id) ON DELETE CASCADE;
+  END IF;
+END
+$$;
 CREATE INDEX IF NOT EXISTS idx_vendor_rules_firm_priority ON vendor_rules (firm_id, priority);
 
 -- Runs scoped by firm
-ALTER TABLE runs ADD COLUMN firm_id UUID;
+ALTER TABLE runs ADD COLUMN IF NOT EXISTS firm_id UUID;
 UPDATE runs r SET firm_id = COALESCE(v.firm_id, (SELECT id FROM firms WHERE code = 'default')) FROM vendors v WHERE r.vendor_id = v.id;
 UPDATE runs SET firm_id = (SELECT id FROM firms WHERE code = 'default') WHERE firm_id IS NULL;
 ALTER TABLE runs ALTER COLUMN firm_id SET NOT NULL;
-ALTER TABLE runs ADD CONSTRAINT runs_firm_fk FOREIGN KEY (firm_id) REFERENCES firms (id) ON DELETE CASCADE;
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'runs_firm_fk') THEN
+    ALTER TABLE runs ADD CONSTRAINT runs_firm_fk FOREIGN KEY (firm_id) REFERENCES firms (id) ON DELETE CASCADE;
+  END IF;
+END
+$$;
 
 -- Invoice headers
 CREATE TABLE IF NOT EXISTS invoices (

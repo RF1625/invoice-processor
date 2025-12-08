@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireFirmId } from "@/lib/tenant";
 
 const parseJson = (raw: unknown) => {
   if (typeof raw === "string" && raw.trim().length > 0) {
@@ -12,10 +13,15 @@ const parseJson = (raw: unknown) => {
 export async function PUT(req: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
     const params = await context.params;
+    const firmId = await requireFirmId();
+    const existing = await prisma.vendorRule.findFirst({ where: { id: params.id, firmId } });
+    if (!existing) return NextResponse.json({ error: "Rule not found" }, { status: 404 });
+
     const body = await req.json();
     const rule = await prisma.vendorRule.update({
       where: { id: params.id },
       data: {
+        firmId,
         vendorId: body.vendorId,
         priority: body.priority != null ? Number(body.priority) : 100,
         matchType: body.matchType,
@@ -37,6 +43,9 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
 export async function DELETE(_req: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
     const params = await context.params;
+    const firmId = await requireFirmId();
+    const existing = await prisma.vendorRule.findFirst({ where: { id: params.id, firmId } });
+    if (!existing) return NextResponse.json({ error: "Rule not found" }, { status: 404 });
     await prisma.vendorRule.delete({ where: { id: params.id } });
     return NextResponse.json({ ok: true }, { status: 200 });
   } catch (err) {

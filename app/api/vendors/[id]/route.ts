@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireFirmId } from "@/lib/tenant";
 
 const parseJson = (raw: unknown) => {
   if (typeof raw === "string" && raw.trim().length > 0) {
@@ -11,7 +12,8 @@ const parseJson = (raw: unknown) => {
 
 export async function GET(_req: NextRequest, context: { params: Promise<{ id: string }> }) {
   const params = await context.params;
-  const vendor = await prisma.vendor.findUnique({ where: { id: params.id } });
+  const firmId = await requireFirmId();
+  const vendor = await prisma.vendor.findFirst({ where: { id: params.id, firmId } });
   if (!vendor) return NextResponse.json({ error: "Vendor not found" }, { status: 404 });
   return NextResponse.json({ vendor }, { status: 200 });
 }
@@ -19,6 +21,10 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ id: st
 export async function PUT(req: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
     const params = await context.params;
+    const firmId = await requireFirmId();
+    const existing = await prisma.vendor.findFirst({ where: { id: params.id, firmId } });
+    if (!existing) return NextResponse.json({ error: "Vendor not found" }, { status: 404 });
+
     const body = await req.json();
     const vendor = await prisma.vendor.update({
       where: { id: params.id },
@@ -41,6 +47,9 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
 export async function DELETE(_req: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
     const params = await context.params;
+    const firmId = await requireFirmId();
+    const existing = await prisma.vendor.findFirst({ where: { id: params.id, firmId } });
+    if (!existing) return NextResponse.json({ error: "Vendor not found" }, { status: 404 });
     await prisma.vendor.delete({ where: { id: params.id } });
     return NextResponse.json({ ok: true }, { status: 200 });
   } catch (err) {

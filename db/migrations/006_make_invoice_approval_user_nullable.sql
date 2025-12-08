@@ -1,0 +1,5 @@
+BEGIN;
+
+ALTER TABLE invoice_approvals ALTER COLUMN user_id DROP NOT NULL;
+
+COMMIT;

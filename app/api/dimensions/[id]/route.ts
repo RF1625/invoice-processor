@@ -1,9 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireFirmId } from "@/lib/tenant";
 
 export async function PUT(req: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
     const params = await context.params;
+    const firmId = await requireFirmId();
+    const existing = await prisma.dimension.findFirst({ where: { id: params.id, firmId } });
+    if (!existing) return NextResponse.json({ error: "Dimension value not found" }, { status: 404 });
+
     const body = await req.json();
     const dimension = await prisma.dimension.update({
       where: { id: params.id },
@@ -24,6 +29,9 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
 export async function DELETE(_req: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
     const params = await context.params;
+    const firmId = await requireFirmId();
+    const existing = await prisma.dimension.findFirst({ where: { id: params.id, firmId } });
+    if (!existing) return NextResponse.json({ error: "Dimension value not found" }, { status: 404 });
     await prisma.dimension.delete({ where: { id: params.id } });
     return NextResponse.json({ ok: true }, { status: 200 });
   } catch (err) {

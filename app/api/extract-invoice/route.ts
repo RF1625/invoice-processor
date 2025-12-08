@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import crypto from "node:crypto";
 import { analyzeInvoiceBuffer, MAX_INVOICE_FILE_BYTES } from "@/lib/invoiceAnalyzer";
+import { requireFirmId } from "@/lib/tenant";
 
 export async function POST(req: NextRequest) {
   try {
@@ -29,10 +31,22 @@ export async function POST(req: NextRequest) {
     }
 
     const bytes = Buffer.from(await file.arrayBuffer());
+    const firmId = await requireFirmId();
     const fileName = "name" in file ? (file as File).name ?? null : null;
+    const checksum = crypto.createHash("sha256").update(bytes).digest("hex");
+    const storagePath = `local-upload/${firmId}/${Date.now()}-${fileName ?? "upload"}`;
+
     const { processedInvoice, navPayload, ruleApplications, runId, modelId, pagesAnalyzed } =
       await analyzeInvoiceBuffer(bytes, {
         fileName,
+        firmId,
+        fileMeta: {
+          fileName: fileName ?? "upload",
+          storagePath,
+          sizeBytes: file.size,
+          contentType: "type" in file ? (file as File).type ?? null : null,
+          checksum,
+        },
       });
 
     return NextResponse.json(

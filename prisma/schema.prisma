@@ -34,9 +34,45 @@ model Firm {
   runs       Run[]
   invoices   Invoice[]
   invoiceLines InvoiceLine[]
+  memberships FirmMembership[]
+  sessions  Session[]
+  defaultUsers User[] @relation("DefaultFirm")
+  files      File[]
+  navPostLogs NavPostLog[]
+  invoiceApprovals InvoiceApproval[]
+  invitations InvitationToken[]
 
   @@unique([code])
   @@map("firms")
+}
+
+model User {
+  id             String            @id @default(dbgenerated("(md5(random()::text || clock_timestamp()::text))::uuid")) @db.Uuid
+  email          String            @unique
+  name           String?
+  passwordHash   String            @map("password_hash")
+  defaultFirmId  String?           @map("default_firm_id") @db.Uuid
+  defaultFirm    Firm?             @relation("DefaultFirm", fields: [defaultFirmId], references: [id])
+  memberships    FirmMembership[]
+  sessions       Session[]
+  passwordResetTokens PasswordResetToken[]
+  invitationsSent   InvitationToken[] @relation("InvitationSent")
+  invitationsAccepted InvitationToken[] @relation("InvitationAccepted")
+  vendorCreated   Vendor[] @relation("VendorCreatedBy")
+  vendorUpdated   Vendor[] @relation("VendorUpdatedBy")
+  glAccountCreated GlAccount[] @relation("GlAccountCreatedBy")
+  glAccountUpdated GlAccount[] @relation("GlAccountUpdatedBy")
+  dimensionCreated Dimension[] @relation("DimensionCreatedBy")
+  dimensionUpdated Dimension[] @relation("DimensionUpdatedBy")
+  vendorRuleCreated VendorRule[] @relation("VendorRuleCreatedBy")
+  vendorRuleUpdated VendorRule[] @relation("VendorRuleUpdatedBy")
+  invoiceCreated Invoice[] @relation("InvoiceCreatedBy")
+  invoiceUpdated Invoice[] @relation("InvoiceUpdatedBy")
+  invoiceApprovals InvoiceApproval[]
+  createdAt      DateTime          @default(now()) @map("created_at")
+  updatedAt      DateTime          @default(now()) @updatedAt @map("updated_at")
+
+  @@map("users")
 }
 
 model Vendor {
@@ -49,6 +85,10 @@ model Vendor {
   defaultDimensions  Json?       @map("default_dimensions")
   defaultCurrency    String?     @map("default_currency")
   active             Boolean     @default(true)
+  createdBy          String?     @map("created_by") @db.Uuid
+  updatedBy          String?     @map("updated_by") @db.Uuid
+  createdByUser      User?       @relation("VendorCreatedBy", fields: [createdBy], references: [id])
+  updatedByUser      User?       @relation("VendorUpdatedBy", fields: [updatedBy], references: [id])
   createdAt          DateTime    @default(now()) @map("created_at")
   updatedAt          DateTime    @default(now()) @updatedAt @map("updated_at")
   rules              VendorRule[]
@@ -66,6 +106,10 @@ model GlAccount {
   no        String   @map("no")
   name      String
   type      String?
+  createdBy String?  @map("created_by") @db.Uuid
+  updatedBy String?  @map("updated_by") @db.Uuid
+  createdByUser User? @relation("GlAccountCreatedBy", fields: [createdBy], references: [id])
+  updatedByUser User? @relation("GlAccountUpdatedBy", fields: [updatedBy], references: [id])
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
 
@@ -81,6 +125,10 @@ model Dimension {
   valueCode String   @map("value_code")
   valueName String   @map("value_name")
   active    Boolean  @default(true)
+  createdBy String?  @map("created_by") @db.Uuid
+  updatedBy String?  @map("updated_by") @db.Uuid
+  createdByUser User? @relation("DimensionCreatedBy", fields: [createdBy], references: [id])
+  updatedByUser User? @relation("DimensionUpdatedBy", fields: [updatedBy], references: [id])
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
 
@@ -101,6 +149,10 @@ model VendorRule {
   dimensionOverrides Json      @default(dbgenerated("'{}'::jsonb")) @map("dimension_overrides")
   active             Boolean   @default(true)
   comment            String?
+  createdBy          String?   @map("created_by") @db.Uuid
+  updatedBy          String?   @map("updated_by") @db.Uuid
+  createdByUser      User?     @relation("VendorRuleCreatedBy", fields: [createdBy], references: [id])
+  updatedByUser      User?     @relation("VendorRuleUpdatedBy", fields: [updatedBy], references: [id])
   createdAt          DateTime  @default(now()) @map("created_at")
   updatedAt          DateTime  @default(now()) @updatedAt @map("updated_at")
 
@@ -124,6 +176,8 @@ model Run {
   navPayload       Json?    @map("nav_payload")
   createdAt        DateTime @default(now()) @map("created_at")
   invoices         Invoice[]
+  files            File[]
+  navPostLogs      NavPostLog[]
 
   @@map("runs")
 }
@@ -150,9 +204,16 @@ model Invoice {
   navStatus       String?       @map("nav_status")
   lockedAt        DateTime?     @map("locked_at")
   postedAt        DateTime?     @map("posted_at")
+  createdBy       String?       @map("created_by") @db.Uuid
+  updatedBy       String?       @map("updated_by") @db.Uuid
+  createdByUser   User?         @relation("InvoiceCreatedBy", fields: [createdBy], references: [id])
+  updatedByUser   User?         @relation("InvoiceUpdatedBy", fields: [updatedBy], references: [id])
   createdAt       DateTime      @default(now()) @map("created_at")
   updatedAt       DateTime      @default(now()) @updatedAt @map("updated_at")
   lines           InvoiceLine[]
+  files           File[]
+  navPostLogs     NavPostLog[]
+  approvals       InvoiceApproval[]
 
   @@unique([firmId, invoiceNo])
   @@map("invoices")
@@ -180,4 +241,115 @@ model InvoiceLine {
   @@index([invoiceId])
   @@index([firmId, invoiceId, lineNo])
   @@map("invoice_lines")
+}
+
+model FirmMembership {
+  id        String   @id @default(dbgenerated("(md5(random()::text || clock_timestamp()::text))::uuid")) @db.Uuid
+  firmId    String   @map("firm_id") @db.Uuid
+  firm      Firm     @relation(fields: [firmId], references: [id])
+  userId    String   @map("user_id") @db.Uuid
+  user      User     @relation(fields: [userId], references: [id])
+  role      String   @default("member")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@unique([firmId, userId])
+  @@map("firm_memberships")
+}
+
+model Session {
+  id        String   @id @default(dbgenerated("(md5(random()::text || clock_timestamp()::text))::uuid")) @db.Uuid
+  firmId    String   @map("firm_id") @db.Uuid
+  firm      Firm     @relation(fields: [firmId], references: [id])
+  userId    String   @map("user_id") @db.Uuid
+  user      User     @relation(fields: [userId], references: [id])
+  token     String   @unique
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("sessions")
+}
+
+model PasswordResetToken {
+  id        String   @id @default(dbgenerated("(md5(random()::text || clock_timestamp()::text))::uuid")) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  user      User     @relation(fields: [userId], references: [id])
+  token     String   @unique
+  expiresAt DateTime @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("password_reset_tokens")
+}
+
+model InvitationToken {
+  id         String   @id @default(dbgenerated("(md5(random()::text || clock_timestamp()::text))::uuid")) @db.Uuid
+  email      String
+  firmId     String   @map("firm_id") @db.Uuid
+  firm       Firm     @relation(fields: [firmId], references: [id])
+  invitedBy  String?  @map("invited_by") @db.Uuid
+  invitedByUser User? @relation("InvitationSent", fields: [invitedBy], references: [id])
+  acceptedBy  String?  @map("accepted_by") @db.Uuid
+  acceptedByUser User? @relation("InvitationAccepted", fields: [acceptedBy], references: [id])
+  role       String   @default("member")
+  token      String   @unique
+  expiresAt  DateTime @map("expires_at")
+  acceptedAt DateTime? @map("accepted_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@map("invitation_tokens")
+}
+
+model File {
+  id          String   @id @default(dbgenerated("(md5(random()::text || clock_timestamp()::text))::uuid")) @db.Uuid
+  firmId      String   @map("firm_id") @db.Uuid
+  firm        Firm     @relation(fields: [firmId], references: [id])
+  runId       String?  @map("run_id") @db.Uuid
+  run         Run?     @relation(fields: [runId], references: [id])
+  invoiceId   String?  @map("invoice_id") @db.Uuid
+  invoice     Invoice? @relation(fields: [invoiceId], references: [id])
+  fileName    String   @map("file_name")
+  storagePath String   @map("storage_path")
+  contentType String?  @map("content_type")
+  sizeBytes   BigInt?  @map("size_bytes")
+  checksum    String?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([firmId, runId, invoiceId])
+  @@map("files")
+}
+
+model InvoiceApproval {
+  id        String   @id @default(dbgenerated("(md5(random()::text || clock_timestamp()::text))::uuid")) @db.Uuid
+  firmId    String   @map("firm_id") @db.Uuid
+  firm      Firm     @relation(fields: [firmId], references: [id])
+  invoiceId String   @map("invoice_id") @db.Uuid
+  invoice   Invoice  @relation(fields: [invoiceId], references: [id])
+  userId    String?  @map("user_id") @db.Uuid
+  user      User?    @relation(fields: [userId], references: [id])
+  status    String   @default("pending")
+  comment   String?
+  actedAt   DateTime? @map("acted_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([invoiceId])
+  @@index([firmId, invoiceId])
+  @@map("invoice_approvals")
+}
+
+model NavPostLog {
+  id        String   @id @default(dbgenerated("(md5(random()::text || clock_timestamp()::text))::uuid")) @db.Uuid
+  firmId    String   @map("firm_id") @db.Uuid
+  firm      Firm     @relation(fields: [firmId], references: [id])
+  invoiceId String?  @map("invoice_id") @db.Uuid
+  invoice   Invoice? @relation(fields: [invoiceId], references: [id])
+  runId     String?  @map("run_id") @db.Uuid
+  run       Run?     @relation(fields: [runId], references: [id])
+  status    String
+  message   String?
+  response  Json?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([firmId, invoiceId])
+  @@map("nav_post_logs")
 }

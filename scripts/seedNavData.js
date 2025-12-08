@@ -8,8 +8,13 @@ const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 
 async function main() {
+  const firm =
+    (await prisma.firm.findFirst({ where: { code: "default" } })) ??
+    (await prisma.firm.create({ data: { name: "Default Firm", code: "default" } }));
+  const firmId = firm.id;
+
   const freightVendor = await prisma.vendor.upsert({
-    where: { vendorNo: "10000" },
+    where: { firmId_vendorNo: { firmId, vendorNo: "10000" } },
     update: {
       name: "South Freight & Cartage Ltd",
       defaultCurrency: "NZD",
@@ -18,6 +23,7 @@ async function main() {
       active: true,
     },
     create: {
+      firmId,
       vendorNo: "10000",
       name: "South Freight & Cartage Ltd",
       defaultCurrency: "NZD",
@@ -28,39 +34,45 @@ async function main() {
   });
 
   const blueSky = await prisma.vendor.upsert({
-    where: { vendorNo: "20000" },
+    where: { firmId_vendorNo: { firmId, vendorNo: "20000" } },
     update: { name: "Blue Sky Meats (NZ) Ltd", defaultCurrency: "NZD", active: true },
-    create: { vendorNo: "20000", name: "Blue Sky Meats (NZ) Ltd", defaultCurrency: "NZD", active: true },
+    create: {
+      firmId,
+      vendorNo: "20000",
+      name: "Blue Sky Meats (NZ) Ltd",
+      defaultCurrency: "NZD",
+      active: true,
+    },
   });
 
   const glCartage = await prisma.glAccount.upsert({
-    where: { no: "6210" },
+    where: { firmId_no: { firmId, no: "6210" } },
     update: { name: "Freight and Cartage" },
-    create: { no: "6210", name: "Freight and Cartage" },
+    create: { firmId, no: "6210", name: "Freight and Cartage" },
   });
 
   const glFuel = await prisma.glAccount.upsert({
-    where: { no: "6220" },
+    where: { firmId_no: { firmId, no: "6220" } },
     update: { name: "Fuel Surcharge" },
-    create: { no: "6220", name: "Fuel Surcharge" },
+    create: { firmId, no: "6220", name: "Fuel Surcharge" },
   });
 
   const glPallet = await prisma.glAccount.upsert({
-    where: { no: "6230" },
+    where: { firmId_no: { firmId, no: "6230" } },
     update: { name: "Pallet Handling" },
-    create: { no: "6230", name: "Pallet Handling" },
+    create: { firmId, no: "6230", name: "Pallet Handling" },
   });
 
   await prisma.dimension.upsert({
-    where: { code_valueCode: { code: "DEPARTMENT", valueCode: "OPS" } },
+    where: { firmId_code_valueCode: { firmId, code: "DEPARTMENT", valueCode: "OPS" } },
     update: { valueName: "Operations" },
-    create: { code: "DEPARTMENT", valueCode: "OPS", valueName: "Operations" },
+    create: { firmId, code: "DEPARTMENT", valueCode: "OPS", valueName: "Operations" },
   });
 
   await prisma.dimension.upsert({
-    where: { code_valueCode: { code: "PROJECT", valueCode: "PORTS" } },
+    where: { firmId_code_valueCode: { firmId, code: "PROJECT", valueCode: "PORTS" } },
     update: { valueName: "Port Operations" },
-    create: { code: "PROJECT", valueCode: "PORTS", valueName: "Port Operations" },
+    create: { firmId, code: "PROJECT", valueCode: "PORTS", valueName: "Port Operations" },
   });
 
   await prisma.vendorRule.upsert({
@@ -68,6 +80,7 @@ async function main() {
     update: {},
     create: {
       id: "00000000-0000-0000-0000-000000000001",
+      firmId,
       vendorId: freightVendor.id,
       priority: 10,
       matchType: "description_contains",
@@ -83,6 +96,7 @@ async function main() {
     update: {},
     create: {
       id: "00000000-0000-0000-0000-000000000002",
+      firmId,
       vendorId: freightVendor.id,
       priority: 20,
       matchType: "description_contains",
@@ -98,6 +112,7 @@ async function main() {
     update: {},
     create: {
       id: "00000000-0000-0000-0000-000000000003",
+      firmId,
       vendorId: freightVendor.id,
       priority: 30,
       matchType: "description_contains",
@@ -113,6 +128,7 @@ async function main() {
     update: {},
     create: {
       id: "00000000-0000-0000-0000-000000000004",
+      firmId,
       vendorId: blueSky.id,
       priority: 10,
       matchType: "always",

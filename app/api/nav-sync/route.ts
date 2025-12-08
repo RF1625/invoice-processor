@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
 import { getDimensions, getGlAccounts, getVendors } from "@/lib/navClient";
 import { prisma } from "@/lib/prisma";
+import { requireFirmId } from "@/lib/tenant";
 
 export async function POST() {
   try {
+    const firmId = await requireFirmId();
     const useMock = process.env.NAV_USE_MOCK === "true";
 
     const [vendors, glAccounts, dimensions] = await Promise.all([
@@ -14,13 +16,14 @@ export async function POST() {
 
     for (const v of vendors) {
       await prisma.vendor.upsert({
-        where: { vendorNo: v.no },
+        where: { firmId_vendorNo: { firmId, vendorNo: v.no } },
         update: {
           name: v.name,
           defaultCurrency: v.currencyCode ?? null,
           active: true,
         },
         create: {
+          firmId,
           vendorNo: v.no,
           name: v.name,
           defaultCurrency: v.currencyCode ?? null,
@@ -31,18 +34,19 @@ export async function POST() {
 
     for (const g of glAccounts) {
       await prisma.glAccount.upsert({
-        where: { no: g.no },
+        where: { firmId_no: { firmId, no: g.no } },
         update: { name: g.name, type: g.type ?? null },
-        create: { no: g.no, name: g.name, type: g.type ?? null },
+        create: { firmId, no: g.no, name: g.name, type: g.type ?? null },
       });
     }
 
     for (const d of dimensions) {
       for (const dv of d.values) {
         await prisma.dimension.upsert({
-          where: { code_valueCode: { code: d.code, valueCode: dv.code } },
+          where: { firmId_code_valueCode: { firmId, code: d.code, valueCode: dv.code } },
           update: { valueName: dv.name, active: true },
           create: {
+            firmId,
             code: d.code,
             valueCode: dv.code,
             valueName: dv.name,

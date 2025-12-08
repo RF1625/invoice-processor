@@ -77,7 +77,18 @@ CREATE TABLE IF NOT EXISTS vendor_rules (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS idx_vendor_rules_company_priority ON vendor_rules (company_id, priority);
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_name = 'vendor_rules'
+      AND column_name = 'company_id'
+  ) THEN
+    CREATE INDEX IF NOT EXISTS idx_vendor_rules_company_priority ON vendor_rules (company_id, priority);
+  END IF;
+END
+$$;
 
 CREATE TABLE IF NOT EXISTS invoice_runs (
   id UUID PRIMARY KEY DEFAULT (md5(random()::text || clock_timestamp()::text)::uuid),

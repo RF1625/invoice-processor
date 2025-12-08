@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@/lib/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
+import { requireFirmId } from "@/lib/tenant";
 
 type RunRecord = {
   id: string;
@@ -19,17 +20,18 @@ type RunRecord = {
 export async function GET(_req: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
     const params = await context.params;
+    const firmId = await requireFirmId();
     const primary = (prisma as unknown as { run?: unknown }).run;
     const legacy = (prisma as unknown as { invoiceRun?: unknown }).invoiceRun;
 
-    const fetchRun = async (delegate: { findUnique: (args: unknown) => Promise<RunRecord | null> }) =>
-      delegate.findUnique({ where: { id: params.id }, include: { vendor: true } });
+    const fetchRun = async (delegate: { findFirst: (args: unknown) => Promise<RunRecord | null> }) =>
+      delegate.findFirst({ where: { id: params.id, firmId }, include: { vendor: true } });
 
     let run: RunRecord | null = null;
 
     try {
-      if (primary && typeof (primary as { findUnique: unknown }).findUnique === "function") {
-        run = await fetchRun(primary as { findUnique: (args: unknown) => Promise<RunRecord | null> });
+      if (primary && typeof (primary as { findFirst: unknown }).findFirst === "function") {
+        run = await fetchRun(primary as { findFirst: (args: unknown) => Promise<RunRecord | null> });
       } else {
         throw new Prisma.PrismaClientKnownRequestError("Missing run delegate", {
           clientVersion: "local",
@@ -40,8 +42,8 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ id: st
       const isMissingTable =
         err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2021";
 
-      if (isMissingTable && legacy && typeof (legacy as { findUnique: unknown }).findUnique === "function") {
-        run = await fetchRun(legacy as { findUnique: (args: unknown) => Promise<RunRecord | null> });
+      if (isMissingTable && legacy && typeof (legacy as { findFirst: unknown }).findFirst === "function") {
+        run = await fetchRun(legacy as { findFirst: (args: unknown) => Promise<RunRecord | null> });
       } else {
         throw err;
       }

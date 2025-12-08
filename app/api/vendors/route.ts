@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireFirmId } from "@/lib/tenant";
 
 export async function GET() {
-  const vendors = await prisma.vendor.findMany({ orderBy: { vendorNo: "asc" } });
+  const firmId = await requireFirmId();
+  const vendors = await prisma.vendor.findMany({ where: { firmId }, orderBy: { vendorNo: "asc" } });
   return NextResponse.json({ vendors }, { status: 200 });
 }
 
@@ -16,9 +18,11 @@ const parseJson = (raw: unknown) => {
 
 export async function POST(req: NextRequest) {
   try {
+    const firmId = await requireFirmId();
     const body = await req.json();
     const vendor = await prisma.vendor.create({
       data: {
+        firmId,
         vendorNo: body.vendorNo,
         name: body.name,
         gstNumber: body.gstNumber ?? null,

@@ -1,16 +1,32 @@
 import Link from "next/link";
-import { VendorManager, RuleManager, GlAccountManager, DimensionManager } from "./forms";
+import { VendorManager, RuleManager, GlAccountManager, DimensionManager, InvoiceApprovalPanel } from "./forms";
 import { prisma } from "@/lib/prisma";
+import { requireFirmId } from "@/lib/tenant";
+
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 export default async function DatabasePage() {
   const data = await (async () => {
     try {
+      const firmId = await requireFirmId();
+      const invoices = await fetchInvoicesWithApprovals(firmId);
       return await Promise.all([
-        prisma.vendor.findMany({ orderBy: { vendorNo: "asc" } }),
-        prisma.glAccount.findMany({ orderBy: { no: "asc" } }),
-        prisma.dimension.findMany({ orderBy: [{ code: "asc" }, { valueCode: "asc" }] }),
-        prisma.vendorRule.findMany({ include: { vendor: true }, orderBy: { priority: "asc" } }),
-        prisma.run.findMany({ include: { vendor: true }, orderBy: { createdAt: "desc" }, take: 10 }),
+        prisma.vendor.findMany({ where: { firmId }, orderBy: { vendorNo: "asc" } }),
+        prisma.glAccount.findMany({ where: { firmId }, orderBy: { no: "asc" } }),
+        prisma.dimension.findMany({ where: { firmId }, orderBy: [{ code: "asc" }, { valueCode: "asc" }] }),
+        prisma.vendorRule.findMany({
+          where: { firmId },
+          include: { vendor: true },
+          orderBy: { priority: "asc" },
+        }),
+        prisma.run.findMany({
+          where: { firmId },
+          include: { vendor: true },
+          orderBy: { createdAt: "desc" },
+          take: 10,
+        }),
+        invoices,
       ]);
     } catch (err) {
       console.error("Database fetch failed", err);
@@ -47,7 +63,7 @@ export default async function DatabasePage() {
     );
   }
 
-  const [vendors, glAccounts, dimensions, rules, runs] = data;
+  const [vendors, glAccounts, dimensions, rules, runs, invoices] = data;
 
   const vendorInputs = vendors.map((v) => ({
     id: v.id,
@@ -80,6 +96,22 @@ export default async function DatabasePage() {
     active: r.active,
     comment: r.comment,
     vendorName: r.vendor?.name ?? null,
+  }));
+
+  const invoiceInputs = invoices.map((inv) => ({
+    id: inv.id,
+    invoiceNo: inv.invoiceNo,
+    vendorName: inv.vendor?.name ?? null,
+    status: inv.status,
+    currencyCode: inv.currencyCode,
+    totalAmount: Number(inv.totalAmount ?? 0),
+    approvals: inv.approvals.map((a) => ({
+      id: a.id,
+      status: a.status,
+      comment: a.comment,
+      actedAt: a.actedAt?.toISOString() ?? null,
+      createdAt: a.createdAt.toISOString(),
+    })),
   }));
 
   return (
@@ -169,7 +201,44 @@ export default async function DatabasePage() {
             </table>
           </div>
         </section>
+
+        <InvoiceApprovalPanel invoices={invoiceInputs} />
       </div>
     </main>
   );
+}
+
+async function fetchInvoicesWithApprovals(firmId: string) {
+  try {
+    return await prisma.invoice.findMany({
+      where: { firmId },
+      include: { vendor: true, approvals: { orderBy: { createdAt: "desc" } } },
+      orderBy: { createdAt: "desc" },
+      take: 15,
+    });
+  } catch (err) {
+    console.warn("Invoice fetch with approvals failed, falling back to manual join", err);
+    const invoices = await prisma.invoice.findMany({
+      where: { firmId },
+      include: { vendor: true },
+      orderBy: { createdAt: "desc" },
+      take: 15,
+    });
+
+    try {
+      const approvals = await prisma.invoiceApproval.findMany({
+        where: { firmId, invoiceId: { in: invoices.map((i) => i.id) } },
+        orderBy: { createdAt: "desc" },
+      });
+      const grouped = approvals.reduce<Record<string, typeof approvals>>((acc, approval) => {
+        if (!acc[approval.invoiceId]) acc[approval.invoiceId] = [];
+        acc[approval.invoiceId]?.push(approval);
+        return acc;
+      }, {});
+      return invoices.map((inv) => ({ ...inv, approvals: grouped[inv.id] ?? [] }));
+    } catch (approvalErr) {
+      console.error("Invoice approval fallback failed", approvalErr);
+      return invoices.map((inv) => ({ ...inv, approvals: [] }));
+    }
+  }
 }

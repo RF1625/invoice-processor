@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireFirmId } from "@/lib/tenant";
 
 const parseJson = (raw: unknown) => {
   if (typeof raw === "string" && raw.trim().length > 0) {
@@ -10,7 +11,9 @@ const parseJson = (raw: unknown) => {
 };
 
 export async function GET() {
+  const firmId = await requireFirmId();
   const rules = await prisma.vendorRule.findMany({
+    where: { firmId },
     include: { vendor: true },
     orderBy: [{ priority: "asc" }, { createdAt: "desc" }],
   });
@@ -19,9 +22,11 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
+    const firmId = await requireFirmId();
     const body = await req.json();
     const rule = await prisma.vendorRule.create({
       data: {
+        firmId,
         vendorId: body.vendorId,
         priority: body.priority != null ? Number(body.priority) : 100,
         matchType: body.matchType,

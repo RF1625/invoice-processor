@@ -87,23 +87,31 @@ export async function applyVendorRulesAndLog(params: {
   invoice: ParsedInvoice;
   navVendorNo?: string | null;
   fileName?: string | null;
+  firmId: string;
+  fileMeta?: {
+    fileName: string;
+    storagePath?: string;
+    sizeBytes?: number;
+    contentType?: string | null;
+    checksum?: string | null;
+  };
 }): Promise<{
   invoice: ParsedInvoice;
   navPayload: NavPurchaseInvoicePayload | null;
   ruleApplications: RuleApplication[];
   runId: string;
 }> {
-  const { invoice, navVendorNo, fileName } = params;
+  const { invoice, navVendorNo, fileName, firmId, fileMeta } = params;
 
   const vendor =
     navVendorNo != null
       ? await prisma.vendor.findUnique({
-          where: { vendorNo: navVendorNo },
+          where: { firmId_vendorNo: { firmId, vendorNo: navVendorNo } },
           include: { rules: { where: { active: true }, orderBy: { priority: "asc" } } },
         })
       : invoice.vendorName
         ? await prisma.vendor.findFirst({
-            where: { name: { equals: invoice.vendorName, mode: "insensitive" } },
+            where: { firmId, name: { equals: invoice.vendorName, mode: "insensitive" } },
             include: { rules: { where: { active: true }, orderBy: { priority: "asc" } } },
           })
         : null;
@@ -169,6 +177,7 @@ export async function applyVendorRulesAndLog(params: {
 
   const run = await prisma.run.create({
     data: {
+      firmId,
       vendorId: vendor?.id ?? null,
       vendorNo: resolvedVendorNo,
       fileName: fileName ?? null,
@@ -180,6 +189,20 @@ export async function applyVendorRulesAndLog(params: {
     },
     select: { id: true },
   });
+
+  if (fileMeta) {
+    await prisma.file.create({
+      data: {
+        firmId,
+        runId: run.id,
+        fileName: fileMeta.fileName,
+        storagePath: fileMeta.storagePath ?? fileMeta.fileName,
+        contentType: fileMeta.contentType ?? null,
+        sizeBytes: fileMeta.sizeBytes != null ? BigInt(fileMeta.sizeBytes) : null,
+        checksum: fileMeta.checksum ?? null,
+      },
+    });
+  }
 
   return {
     invoice: { ...invoice, navVendorNo: resolvedVendorNo, items: itemsWithAssignments },

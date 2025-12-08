@@ -1,9 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireFirmId } from "@/lib/tenant";
 
 export async function PUT(req: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
     const params = await context.params;
+    const firmId = await requireFirmId();
+    const existing = await prisma.glAccount.findFirst({ where: { id: params.id, firmId } });
+    if (!existing) return NextResponse.json({ error: "G/L account not found" }, { status: 404 });
+
     const body = await req.json();
     const glAccount = await prisma.glAccount.update({
       where: { id: params.id },
@@ -23,6 +28,9 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
 export async function DELETE(_req: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
     const params = await context.params;
+    const firmId = await requireFirmId();
+    const existing = await prisma.glAccount.findFirst({ where: { id: params.id, firmId } });
+    if (!existing) return NextResponse.json({ error: "G/L account not found" }, { status: 404 });
     await prisma.glAccount.delete({ where: { id: params.id } });
     return NextResponse.json({ ok: true }, { status: 200 });
   } catch (err) {

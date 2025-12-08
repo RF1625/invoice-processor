@@ -62,7 +62,7 @@ CREATE TABLE vendor_rules (
 
 CREATE INDEX IF NOT EXISTS idx_vendor_rules_vendor_priority ON vendor_rules (vendor_id, priority);
 
-CREATE TABLE runs (
+CREATE TABLE IF NOT EXISTS runs (
   id UUID PRIMARY KEY DEFAULT (md5(random()::text || clock_timestamp()::text)::uuid),
   vendor_id UUID REFERENCES vendors (id) ON DELETE SET NULL,
   vendor_no TEXT,
