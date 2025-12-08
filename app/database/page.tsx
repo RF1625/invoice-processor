@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Prisma } from "@/lib/generated/prisma/client";
 import { VendorManager, RuleManager, GlAccountManager, DimensionManager, InvoiceApprovalPanel } from "./forms";
 import { prisma } from "@/lib/prisma";
 import { requireFirmId } from "@/lib/tenant";
@@ -217,28 +218,97 @@ async function fetchInvoicesWithApprovals(firmId: string) {
       take: 15,
     });
   } catch (err) {
-    console.warn("Invoice fetch with approvals failed, falling back to manual join", err);
-    const invoices = await prisma.invoice.findMany({
-      where: { firmId },
-      include: { vendor: true },
-      orderBy: { createdAt: "desc" },
-      take: 15,
-    });
-
-    try {
-      const approvals = await prisma.invoiceApproval.findMany({
-        where: { firmId, invoiceId: { in: invoices.map((i) => i.id) } },
-        orderBy: { createdAt: "desc" },
-      });
-      const grouped = approvals.reduce<Record<string, typeof approvals>>((acc, approval) => {
-        if (!acc[approval.invoiceId]) acc[approval.invoiceId] = [];
-        acc[approval.invoiceId]?.push(approval);
-        return acc;
-      }, {});
-      return invoices.map((inv) => ({ ...inv, approvals: grouped[inv.id] ?? [] }));
-    } catch (approvalErr) {
-      console.error("Invoice approval fallback failed", approvalErr);
-      return invoices.map((inv) => ({ ...inv, approvals: [] }));
+    const isMissingColumn =
+      err instanceof Prisma.PrismaClientKnownRequestError && (err.code === "P2022" || err.code === "P2021");
+    if (!isMissingColumn) {
+      throw err;
     }
+
+    console.warn("Invoice fetch failed due to missing columns, falling back to raw queries", err);
+
+    const firmUuid = Prisma.sql`${firmId}::uuid`;
+    const invoices = await prisma.$queryRaw<
+      Array<{
+        id: string;
+        invoice_no: string | null;
+        vendor_id: string | null;
+        status: string;
+        currency_code: string | null;
+        total_amount: Prisma.Decimal | number | null;
+        created_at: Date;
+        vendor_name: string | null;
+      }>
+    >(Prisma.sql`
+      SELECT i.id,
+             i.invoice_no,
+             i.vendor_id,
+             i.status,
+             i.currency_code,
+             i.total_amount,
+             i.created_at,
+             v.name AS vendor_name
+      FROM invoices i
+      LEFT JOIN vendors v ON v.id = i.vendor_id
+      WHERE i.firm_id = ${firmUuid}
+      ORDER BY i.created_at DESC
+      LIMIT 15
+    `);
+
+    const invoiceIds = invoices.map((i) => i.id);
+    let approvals: Array<{
+      id: string;
+      invoice_id: string;
+      status: string;
+      comment: string | null;
+      acted_at: Date | null;
+      created_at: Date;
+    }> = [];
+
+    if (invoiceIds.length > 0) {
+      try {
+        const invoiceIdArray = Prisma.sql`ARRAY[${Prisma.join(invoiceIds)}]::uuid[]`;
+        approvals = await prisma.$queryRaw<
+          Array<{
+            id: string;
+            invoice_id: string;
+            status: string;
+            comment: string | null;
+            acted_at: Date | null;
+            created_at: Date;
+          }>
+        >(Prisma.sql`
+          SELECT id, invoice_id, status, comment, acted_at, created_at
+          FROM invoice_approvals
+          WHERE firm_id = ${firmUuid} AND invoice_id = ANY (${invoiceIdArray})
+          ORDER BY created_at DESC
+        `);
+      } catch (approvalErr) {
+        console.warn("Invoice approval fallback failed", approvalErr);
+      }
+    }
+
+    const grouped = approvals.reduce<Record<string, typeof approvals>>((acc, approval) => {
+      if (!acc[approval.invoice_id]) acc[approval.invoice_id] = [];
+      acc[approval.invoice_id]?.push(approval);
+      return acc;
+    }, {});
+
+    return invoices.map((inv) => ({
+      id: inv.id,
+      invoiceNo: inv.invoice_no,
+      vendor: inv.vendor_name ? { name: inv.vendor_name } : null,
+      status: inv.status,
+      currencyCode: inv.currency_code,
+      totalAmount: inv.total_amount ?? 0,
+      createdAt: inv.created_at,
+      approvals:
+        grouped[inv.id]?.map((a) => ({
+          id: a.id,
+          status: a.status,
+          comment: a.comment,
+          actedAt: a.acted_at,
+          createdAt: a.created_at,
+        })) ?? [],
+    }));
   }
 }
