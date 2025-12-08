@@ -21,8 +21,28 @@ enum MatchType {
   @@map("match_type")
 }
 
+model Firm {
+  id        String        @id @default(dbgenerated("(md5(random()::text || clock_timestamp()::text))::uuid")) @db.Uuid
+  name      String
+  code      String
+  createdAt DateTime      @default(now()) @map("created_at")
+  updatedAt DateTime      @default(now()) @updatedAt @map("updated_at")
+  vendors   Vendor[]
+  glAccounts GlAccount[]
+  dimensions Dimension[]
+  vendorRules VendorRule[]
+  runs       Run[]
+  invoices   Invoice[]
+  invoiceLines InvoiceLine[]
+
+  @@unique([code])
+  @@map("firms")
+}
+
 model Vendor {
   id                 String      @id @default(dbgenerated("(md5(random()::text || clock_timestamp()::text))::uuid")) @db.Uuid
+  firmId             String      @map("firm_id") @db.Uuid
+  firm               Firm        @relation(fields: [firmId], references: [id])
   vendorNo           String      @map("vendor_no")
   name               String
   gstNumber          String?     @map("gst_number")
@@ -33,24 +53,30 @@ model Vendor {
   updatedAt          DateTime    @default(now()) @updatedAt @map("updated_at")
   rules              VendorRule[]
   runs               Run[]
+  invoices           Invoice[]
 
-  @@unique([vendorNo])
+  @@unique([firmId, vendorNo])
   @@map("vendors")
 }
 
 model GlAccount {
   id        String   @id @default(dbgenerated("(md5(random()::text || clock_timestamp()::text))::uuid")) @db.Uuid
-  no        String   @unique @map("no")
+  firmId    String   @map("firm_id") @db.Uuid
+  firm      Firm     @relation(fields: [firmId], references: [id])
+  no        String   @map("no")
   name      String
   type      String?
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
 
+  @@unique([firmId, no])
   @@map("gl_accounts")
 }
 
 model Dimension {
   id        String   @id @default(dbgenerated("(md5(random()::text || clock_timestamp()::text))::uuid")) @db.Uuid
+  firmId    String   @map("firm_id") @db.Uuid
+  firm      Firm     @relation(fields: [firmId], references: [id])
   code      String
   valueCode String   @map("value_code")
   valueName String   @map("value_name")
@@ -58,12 +84,14 @@ model Dimension {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
 
-  @@unique([code, valueCode])
+  @@unique([firmId, code, valueCode])
   @@map("dimensions")
 }
 
 model VendorRule {
   id                 String    @id @default(dbgenerated("(md5(random()::text || clock_timestamp()::text))::uuid")) @db.Uuid
+  firmId             String    @map("firm_id") @db.Uuid
+  firm               Firm      @relation(fields: [firmId], references: [id])
   vendorId           String    @map("vendor_id") @db.Uuid
   vendor             Vendor    @relation(fields: [vendorId], references: [id])
   priority           Int       @default(100)
@@ -77,11 +105,14 @@ model VendorRule {
   updatedAt          DateTime  @default(now()) @updatedAt @map("updated_at")
 
   @@index([vendorId, priority])
+  @@index([firmId, priority])
   @@map("vendor_rules")
 }
 
 model Run {
   id               String   @id @default(dbgenerated("(md5(random()::text || clock_timestamp()::text))::uuid")) @db.Uuid
+  firmId           String   @map("firm_id") @db.Uuid
+  firm             Firm     @relation(fields: [firmId], references: [id])
   vendorId         String?  @map("vendor_id") @db.Uuid
   vendor           Vendor?  @relation(fields: [vendorId], references: [id])
   vendorNo         String?  @map("vendor_no")
@@ -92,6 +123,61 @@ model Run {
   ruleApplications Json?    @map("rule_applications")
   navPayload       Json?    @map("nav_payload")
   createdAt        DateTime @default(now()) @map("created_at")
+  invoices         Invoice[]
 
   @@map("runs")
+}
+
+model Invoice {
+  id              String        @id @default(dbgenerated("(md5(random()::text || clock_timestamp()::text))::uuid")) @db.Uuid
+  firmId          String        @map("firm_id") @db.Uuid
+  firm            Firm          @relation(fields: [firmId], references: [id])
+  vendorId        String?       @map("vendor_id") @db.Uuid
+  vendor          Vendor?       @relation(fields: [vendorId], references: [id])
+  runId           String?       @map("run_id") @db.Uuid
+  run             Run?          @relation(fields: [runId], references: [id])
+  vendorNo        String?       @map("vendor_no")
+  invoiceNo       String?       @map("invoice_no")
+  invoiceDate     DateTime?     @map("invoice_date") @db.Date
+  dueDate         DateTime?     @map("due_date") @db.Date
+  currencyCode    String?       @map("currency_code")
+  status          String        @default("draft")
+  totalAmount     Decimal       @default(0) @map("total_amount") @db.Decimal(18, 2)
+  taxAmount       Decimal       @default(0) @map("tax_amount") @db.Decimal(18, 2)
+  netAmount       Decimal       @default(0) @map("net_amount") @db.Decimal(18, 2)
+  originalPayload Json?         @map("original_payload")
+  navDocumentNo   String?       @map("nav_document_no")
+  navStatus       String?       @map("nav_status")
+  lockedAt        DateTime?     @map("locked_at")
+  postedAt        DateTime?     @map("posted_at")
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @default(now()) @updatedAt @map("updated_at")
+  lines           InvoiceLine[]
+
+  @@unique([firmId, invoiceNo])
+  @@map("invoices")
+}
+
+model InvoiceLine {
+  id              String    @id @default(dbgenerated("(md5(random()::text || clock_timestamp()::text))::uuid")) @db.Uuid
+  firmId          String    @map("firm_id") @db.Uuid
+  firm            Firm      @relation(fields: [firmId], references: [id])
+  invoiceId       String    @map("invoice_id") @db.Uuid
+  invoice         Invoice   @relation(fields: [invoiceId], references: [id])
+  lineNo          Int       @default(1) @map("line_no")
+  description     String?
+  quantity        Decimal   @default(1) @db.Decimal(18, 4)
+  unitCost        Decimal   @default(0) @map("unit_cost") @db.Decimal(18, 4)
+  lineAmount      Decimal   @default(0) @map("line_amount") @db.Decimal(18, 2)
+  glAccountNo     String?   @map("gl_account_no")
+  dimensionValues Json      @default(dbgenerated("'{}'::jsonb")) @map("dimension_values")
+  taxCode         String?   @map("tax_code")
+  taxRate         Decimal?  @map("tax_rate") @db.Decimal(10, 4)
+  active          Boolean   @default(true)
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @default(now()) @updatedAt @map("updated_at")
+
+  @@index([invoiceId])
+  @@index([firmId, invoiceId, lineNo])
+  @@map("invoice_lines")
 }
