@@ -35,6 +35,17 @@ The easiest way to deploy your Next.js app is to use the [Vercel Platform](https
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
 
+## Supabase setup (primary database)
+
+- Point the app at your Supabase Postgres by setting `DATABASE_URL` to the connection string from **Settings → Database → Connection string → psql** (example: `postgresql://postgres:<password>@db.<project>.supabase.co:5432/postgres?sslmode=require`). Set `PGSSL=true` if you prefer forcing SSL in code.
+- Run the schema in Supabase: `npm run db:migrate` (SQL in `db/migrations`) followed by `npm run prisma:generate`. Optionally seed starter data with `npm run db:seed`.
+- Master data now lives in Supabase, not NAV. You can manage vendors, G/L accounts, dimensions, and vendor rules directly in the `/database` UI or via REST endpoints:
+  - Vendors: `GET/POST /api/vendors`, `PUT/DELETE /api/vendors/:id`
+  - G/L accounts: `GET/POST /api/gl-accounts`, `PUT/DELETE /api/gl-accounts/:id`
+  - Dimensions: `GET/POST /api/dimensions`, `PUT/DELETE /api/dimensions/:id`
+  - Vendor rules: `GET/POST /api/vendor-rules`, `PUT/DELETE /api/vendor-rules/:id`
+- Invoice runs (including extracted payloads and NAV previews) are stored in Supabase too; see `runs` table. The UI under `/database` now includes forms to add/edit/delete G/L accounts and dimensions without relying on NAV sync.
+
 ## NAV 2018 integration notes
 
 - Goal: keep the extractor compatible with Microsoft Dynamics NAV 2018 (on-prem). The API should be able to push structured invoice data into NAV via OData v4 (or SOAP/codeunits).
@@ -43,6 +54,7 @@ Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/bui
 - Endpoint shape example: `https://navhost:7048/DynamicsNAV110/ODataV4/Company('MyCompany')/PurchaseInvoices` or a published custom page. Use Basic auth header and send header/lines JSON payload.
 - Error handling: surface NAV errors back to the UI; consider a staging + job queue pattern to decouple posting from the extractor call.
 - Development: set `NAV_USE_MOCK=true` to use the mock NAV layer (`lib/navClient.ts`, `lib/navMock.ts`, `lib/vendorTemplates.ts`) so the UI/API can build NAV journal previews without a live NAV connection.
+- Posting: set `NAV_BASE_URL`, `NAV_COMPANY`, `NAV_USER`, `NAV_PASSWORD`, and optional `NAV_PURCHASE_INVOICE_PATH` (defaults to `PurchaseInvoices`). Then trigger a post with `POST /api/invoice-runs/:id/post-to-nav` or the "Send to NAV" buttons in the UI; when `NAV_USE_MOCK=true`, the payload is only logged.
 
 ## Database (PostgreSQL) for NAV master data and rules
 

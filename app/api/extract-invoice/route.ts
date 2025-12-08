@@ -30,9 +30,10 @@ export async function POST(req: NextRequest) {
 
     const bytes = Buffer.from(await file.arrayBuffer());
     const fileName = "name" in file ? (file as File).name ?? null : null;
-    const { processedInvoice, navPayload, ruleApplications, modelId, pagesAnalyzed } = await analyzeInvoiceBuffer(bytes, {
-      fileName,
-    });
+    const { processedInvoice, navPayload, ruleApplications, runId, modelId, pagesAnalyzed } =
+      await analyzeInvoiceBuffer(bytes, {
+        fileName,
+      });
 
     return NextResponse.json(
       {
@@ -42,6 +43,7 @@ export async function POST(req: NextRequest) {
         invoice: processedInvoice,
         navPreview: navPayload,
         ruleApplications,
+        runId,
         navUseMock: process.env.NAV_USE_MOCK === "true",
       },
       { status: 200 },

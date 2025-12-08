@@ -91,6 +91,7 @@ export async function applyVendorRulesAndLog(params: {
   invoice: ParsedInvoice;
   navPayload: NavPurchaseInvoicePayload | null;
   ruleApplications: RuleApplication[];
+  runId: string;
 }> {
   const { invoice, navVendorNo, fileName } = params;
 
@@ -166,7 +167,7 @@ export async function applyVendorRulesAndLog(params: {
     ? (navPayload as Prisma.InputJsonValue)
     : undefined;
 
-  await prisma.run.create({
+  const run = await prisma.run.create({
     data: {
       vendorId: vendor?.id ?? null,
       vendorNo: resolvedVendorNo,
@@ -177,11 +178,13 @@ export async function applyVendorRulesAndLog(params: {
       ruleApplications: ruleApplicationsJson,
       navPayload: navPayloadJson,
     },
+    select: { id: true },
   });
 
   return {
     invoice: { ...invoice, navVendorNo: resolvedVendorNo, items: itemsWithAssignments },
     navPayload,
     ruleApplications,
+    runId: run.id,
   };
 }

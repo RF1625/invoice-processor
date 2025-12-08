@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { VendorManager, RuleManager } from "./forms";
+import { VendorManager, RuleManager, GlAccountManager, DimensionManager } from "./forms";
 import { prisma } from "@/lib/prisma";
 
 export default async function DatabasePage() {
@@ -24,7 +24,7 @@ export default async function DatabasePage() {
         <div className="mx-auto max-w-3xl space-y-4">
           <header className="flex items-center justify-between">
             <div>
-              <p className="text-xs uppercase tracking-wide text-slate-500">NAV master data</p>
+              <p className="text-xs uppercase tracking-wide text-slate-500">Master data (Supabase/Postgres)</p>
               <h1 className="text-2xl font-semibold">Vendors, G/L accounts & rules</h1>
             </div>
             <Link
@@ -37,9 +37,9 @@ export default async function DatabasePage() {
           <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">
             <div className="font-semibold">Database unavailable</div>
             <p className="mt-1">
-              Unable to connect to the Postgres instance. Check that <code>DATABASE_URL</code> points to your running
-              server (e.g. <code>rfleck-invoice-pg-flex.postgres.database.azure.com:5432</code>) and that SSL/firewall
-              rules allow this machine to connect.
+              Unable to connect to the Postgres instance. Check that <code>DATABASE_URL</code> points to your Supabase
+              or Postgres server (for Supabase use the psql connection string with <code>sslmode=require</code>) and
+              that SSL/firewall rules allow this machine to connect.
             </p>
           </div>
         </div>
@@ -59,7 +59,15 @@ export default async function DatabasePage() {
     active: v.active,
   }));
 
-  const glAccountInputs = glAccounts.map((g) => ({ id: g.id, no: g.no, name: g.name }));
+  const glAccountInputs = glAccounts.map((g) => ({ id: g.id, no: g.no, name: g.name, type: g.type }));
+
+  const dimensionInputs = dimensions.map((d) => ({
+    id: d.id,
+    code: d.code,
+    valueCode: d.valueCode,
+    valueName: d.valueName,
+    active: d.active,
+  }));
 
   const ruleInputs = rules.map((r) => ({
     id: r.id,
@@ -79,7 +87,7 @@ export default async function DatabasePage() {
       <div className="mx-auto max-w-7xl space-y-8">
         <header className="flex items-center justify-between">
           <div>
-            <p className="text-xs uppercase tracking-wide text-slate-500">NAV master data</p>
+            <p className="text-xs uppercase tracking-wide text-slate-500">Master data (Supabase/Postgres)</p>
             <h1 className="text-2xl font-semibold">Vendors, G/L accounts & rules</h1>
           </div>
           <Link
@@ -98,74 +106,20 @@ export default async function DatabasePage() {
           <VendorManager vendors={vendorInputs} />
         </section>
 
-        <section className="rounded-xl bg-white p-4 shadow ring-1 ring-slate-200">
+        <section className="space-y-3">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold">G/L Accounts</h2>
             <span className="text-xs text-slate-600">{glAccounts.length} entries</span>
           </div>
-          <div className="mt-3 overflow-hidden rounded-lg border border-slate-200">
-            <table className="min-w-full text-sm">
-              <thead className="bg-slate-50 text-slate-600">
-                <tr>
-                  <th className="px-3 py-2 text-left">No</th>
-                  <th className="px-3 py-2 text-left">Name</th>
-                  <th className="px-3 py-2 text-left">Type</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {glAccounts.map((g) => (
-                  <tr key={g.id}>
-                    <td className="px-3 py-2 font-mono text-slate-800">{g.no}</td>
-                    <td className="px-3 py-2">{g.name}</td>
-                    <td className="px-3 py-2">{g.type ?? "—"}</td>
-                  </tr>
-                ))}
-                {glAccounts.length === 0 && (
-                  <tr>
-                    <td className="px-3 py-2 text-slate-600" colSpan={3}>
-                      No G/L accounts synced yet.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+          <GlAccountManager glAccounts={glAccountInputs} />
         </section>
 
-        <section className="rounded-xl bg-white p-4 shadow ring-1 ring-slate-200">
+        <section className="space-y-3">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold">Dimensions</h2>
             <span className="text-xs text-slate-600">{dimensions.length} values</span>
           </div>
-          <div className="mt-3 overflow-hidden rounded-lg border border-slate-200">
-            <table className="min-w-full text-sm">
-              <thead className="bg-slate-50 text-slate-600">
-                <tr>
-                  <th className="px-3 py-2 text-left">Code</th>
-                  <th className="px-3 py-2 text-left">Value code</th>
-                  <th className="px-3 py-2 text-left">Value name</th>
-                  <th className="px-3 py-2 text-left">Active</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {dimensions.map((d) => (
-                  <tr key={d.id}>
-                    <td className="px-3 py-2 font-mono text-slate-800">{d.code}</td>
-                    <td className="px-3 py-2 font-mono text-slate-800">{d.valueCode}</td>
-                    <td className="px-3 py-2">{d.valueName}</td>
-                    <td className="px-3 py-2">{d.active ? "Yes" : "No"}</td>
-                  </tr>
-                ))}
-                {dimensions.length === 0 && (
-                  <tr>
-                    <td className="px-3 py-2 text-slate-600" colSpan={4}>
-                      No dimensions synced yet.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+          <DimensionManager dimensions={dimensionInputs} />
         </section>
 
         <section className="space-y-3">

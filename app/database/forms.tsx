@@ -28,7 +28,8 @@ type RuleInput = {
   vendorName?: string | null;
 };
 
-type GlAccountInput = { id: string; no: string; name: string };
+type GlAccountInput = { id: string; no: string; name: string; type?: string | null };
+type DimensionInput = { id: string; code: string; valueCode: string; valueName: string; active: boolean };
 
 const formatDims = (value: Record<string, string> | null | undefined) =>
   value && Object.keys(value).length > 0 ? JSON.stringify(value) : "—";
@@ -159,7 +160,7 @@ export function VendorManager({ vendors }: { vendors: VendorInput[] }) {
         <div className="flex items-center justify-between">
           <div>
             <div className="text-sm font-semibold text-slate-900">{editingId ? "Edit vendor" : "Add vendor"}</div>
-            <p className="text-xs text-slate-600">Maintain NAV vendor master data</p>
+            <p className="text-xs text-slate-600">Maintain vendor master data stored in Supabase</p>
           </div>
           {editingId && (
             <button type="button" className="text-xs text-slate-600 underline underline-offset-4" onClick={resetForm}>
@@ -223,6 +224,281 @@ export function VendorManager({ vendors }: { vendors: VendorInput[] }) {
           className="w-full rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800"
         >
           {editingId ? "Update vendor" : "Add vendor"}
+        </button>
+      </form>
+    </div>
+  );
+}
+
+export function GlAccountManager({ glAccounts }: { glAccounts: GlAccountInput[] }) {
+  const router = useRouter();
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [no, setNo] = useState("");
+  const [name, setName] = useState("");
+  const [type, setType] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  const resetForm = () => {
+    setEditingId(null);
+    setNo("");
+    setName("");
+    setType("");
+    setError(null);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const payload = { no, name, type: type || null };
+      const res = await fetch(editingId ? `/api/gl-accounts/${editingId}` : "/api/gl-accounts", {
+        method: editingId ? "PUT" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) throw new Error("Failed to save G/L account");
+      resetForm();
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save G/L account");
+    }
+  };
+
+  const handleEdit = (glAccount: GlAccountInput) => {
+    setEditingId(glAccount.id);
+    setNo(glAccount.no);
+    setName(glAccount.name);
+    setType(glAccount.type ?? "");
+    setError(null);
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm("Delete this G/L account?")) return;
+    try {
+      const res = await fetch(`/api/gl-accounts/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Failed to delete G/L account");
+      if (editingId === id) resetForm();
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete G/L account");
+    }
+  };
+
+  return (
+    <div className="grid gap-4 lg:grid-cols-3">
+      <div className="lg:col-span-2 overflow-hidden rounded-xl border border-slate-200 bg-white">
+        <div className="grid grid-cols-3 bg-slate-50 px-3 py-2 text-xs font-semibold uppercase text-slate-600">
+          <span>No</span>
+          <span>Name</span>
+          <span className="text-right">Type</span>
+        </div>
+        <ul className="divide-y divide-slate-100 text-sm">
+          {glAccounts.map((g) => (
+            <li key={g.id} className="grid grid-cols-3 items-center px-3 py-3">
+              <div className="font-mono text-slate-800">{g.no}</div>
+              <div className="text-slate-800">{g.name}</div>
+              <div className="text-right text-slate-700">{g.type ?? "—"}</div>
+              <div className="col-span-3 mt-2 flex gap-2 text-xs">
+                <button className="text-slate-700 underline underline-offset-4" onClick={() => handleEdit(g)}>
+                  Edit
+                </button>
+                <button className="text-red-600 underline underline-offset-4" onClick={() => handleDelete(g.id)}>
+                  Delete
+                </button>
+              </div>
+            </li>
+          ))}
+          {glAccounts.length === 0 && <li className="px-3 py-3 text-slate-600">No G/L accounts yet.</li>}
+        </ul>
+      </div>
+
+      <form onSubmit={handleSubmit} className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="text-sm font-semibold text-slate-900">{editingId ? "Edit G/L account" : "Add G/L account"}</div>
+            <p className="text-xs text-slate-600">Manage chart of accounts without NAV</p>
+          </div>
+          {editingId && (
+            <button type="button" className="text-xs text-slate-600 underline underline-offset-4" onClick={resetForm}>
+              Cancel edit
+            </button>
+          )}
+        </div>
+        {error && <p className="text-xs text-red-600">{error}</p>}
+        <div className="space-y-1">
+          <label className="text-xs font-semibold text-slate-600">G/L number</label>
+          <input
+            required
+            value={no}
+            onChange={(e) => setNo(e.target.value)}
+            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+          />
+        </div>
+        <div className="space-y-1">
+          <label className="text-xs font-semibold text-slate-600">Name</label>
+          <input
+            required
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+          />
+        </div>
+        <div className="space-y-1">
+          <label className="text-xs font-semibold text-slate-600">Type (optional)</label>
+          <input
+            value={type}
+            onChange={(e) => setType(e.target.value)}
+            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+            placeholder="Posting, Heading, Total"
+          />
+        </div>
+        <button
+          type="submit"
+          className="w-full rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+        >
+          {editingId ? "Update G/L account" : "Add G/L account"}
+        </button>
+      </form>
+    </div>
+  );
+}
+
+export function DimensionManager({ dimensions }: { dimensions: DimensionInput[] }) {
+  const router = useRouter();
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [code, setCode] = useState("");
+  const [valueCode, setValueCode] = useState("");
+  const [valueName, setValueName] = useState("");
+  const [active, setActive] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const resetForm = () => {
+    setEditingId(null);
+    setCode("");
+    setValueCode("");
+    setValueName("");
+    setActive(true);
+    setError(null);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const payload = { code, valueCode, valueName, active };
+      const res = await fetch(editingId ? `/api/dimensions/${editingId}` : "/api/dimensions", {
+        method: editingId ? "PUT" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) throw new Error("Failed to save dimension value");
+      resetForm();
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save dimension value");
+    }
+  };
+
+  const handleEdit = (dimension: DimensionInput) => {
+    setEditingId(dimension.id);
+    setCode(dimension.code);
+    setValueCode(dimension.valueCode);
+    setValueName(dimension.valueName);
+    setActive(dimension.active);
+    setError(null);
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm("Delete this dimension value?")) return;
+    try {
+      const res = await fetch(`/api/dimensions/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Failed to delete dimension value");
+      if (editingId === id) resetForm();
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete dimension value");
+    }
+  };
+
+  return (
+    <div className="grid gap-4 lg:grid-cols-3">
+      <div className="lg:col-span-2 overflow-hidden rounded-xl border border-slate-200 bg-white">
+        <div className="grid grid-cols-4 bg-slate-50 px-3 py-2 text-xs font-semibold uppercase text-slate-600">
+          <span>Code</span>
+          <span>Value code</span>
+          <span>Value name</span>
+          <span className="text-right">Active</span>
+        </div>
+        <ul className="divide-y divide-slate-100 text-sm">
+          {dimensions.map((d) => (
+            <li key={d.id} className="grid grid-cols-4 items-center px-3 py-3">
+              <div className="font-mono text-slate-800">{d.code}</div>
+              <div className="font-mono text-slate-800">{d.valueCode}</div>
+              <div className="text-slate-800">{d.valueName}</div>
+              <div className="text-right text-slate-700">{d.active ? "Yes" : "No"}</div>
+              <div className="col-span-4 mt-2 flex gap-2 text-xs">
+                <button className="text-slate-700 underline underline-offset-4" onClick={() => handleEdit(d)}>
+                  Edit
+                </button>
+                <button className="text-red-600 underline underline-offset-4" onClick={() => handleDelete(d.id)}>
+                  Delete
+                </button>
+              </div>
+            </li>
+          ))}
+          {dimensions.length === 0 && <li className="px-3 py-3 text-slate-600">No dimensions yet.</li>}
+        </ul>
+      </div>
+
+      <form onSubmit={handleSubmit} className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="text-sm font-semibold text-slate-900">{editingId ? "Edit dimension value" : "Add dimension value"}</div>
+            <p className="text-xs text-slate-600">Create dimension codes and values locally</p>
+          </div>
+          {editingId && (
+            <button type="button" className="text-xs text-slate-600 underline underline-offset-4" onClick={resetForm}>
+              Cancel edit
+            </button>
+          )}
+        </div>
+        {error && <p className="text-xs text-red-600">{error}</p>}
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1">
+            <label className="text-xs font-semibold text-slate-600">Code</label>
+            <input
+              required
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-semibold text-slate-600">Value code</label>
+            <input
+              required
+              value={valueCode}
+              onChange={(e) => setValueCode(e.target.value)}
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+            />
+          </div>
+        </div>
+        <div className="space-y-1">
+          <label className="text-xs font-semibold text-slate-600">Value name</label>
+          <input
+            required
+            value={valueName}
+            onChange={(e) => setValueName(e.target.value)}
+            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+          />
+        </div>
+        <label className="flex items-center gap-2 text-sm text-slate-700">
+          <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} />
+          Active
+        </label>
+        <button
+          type="submit"
+          className="w-full rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+        >
+          {editingId ? "Update dimension value" : "Add dimension value"}
         </button>
       </form>
     </div>
@@ -433,6 +709,7 @@ export function RuleManager({
               {glAccounts.map((g) => (
                 <SelectItem key={g.id} value={g.no}>
                   {g.no} — {g.name}
+                  {g.type ? ` (${g.type})` : ""}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -463,7 +740,7 @@ export function RuleManager({
         <button
           type="submit"
           className="w-full rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
-          disabled={vendors.length === 0}
+          disabled={vendors.length === 0 || glAccounts.length === 0}
         >
           {editingId ? "Update rule" : "Add rule"}
         </button>

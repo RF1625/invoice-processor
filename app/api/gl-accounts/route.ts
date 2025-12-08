@@ -1,0 +1,24 @@
+import { NextRequest, NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+
+export async function GET() {
+  const glAccounts = await prisma.glAccount.findMany({ orderBy: { no: "asc" } });
+  return NextResponse.json({ glAccounts }, { status: 200 });
+}
+
+export async function POST(req: NextRequest) {
+  try {
+    const body = await req.json();
+    const glAccount = await prisma.glAccount.create({
+      data: {
+        no: body.no,
+        name: body.name,
+        type: body.type ?? null,
+      },
+    });
+    return NextResponse.json({ glAccount }, { status: 201 });
+  } catch (err) {
+    console.error("Failed to create G/L account", err);
+    return NextResponse.json({ error: "Failed to create G/L account" }, { status: 400 });
+  }
+}

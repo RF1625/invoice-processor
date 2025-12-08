@@ -143,7 +143,7 @@ export async function analyzeInvoiceBuffer(buffer: Buffer, opts?: { fileName?: s
   }
 
   const invoice = buildInvoiceSummary(doc);
-  const { invoice: processedInvoice, navPayload, ruleApplications } = await applyVendorRulesAndLog({
+  const { invoice: processedInvoice, navPayload, ruleApplications, runId } = await applyVendorRulesAndLog({
     invoice,
     navVendorNo: invoice.navVendorNo ?? null,
     fileName: opts?.fileName ?? null,
@@ -153,6 +153,7 @@ export async function analyzeInvoiceBuffer(buffer: Buffer, opts?: { fileName?: s
     processedInvoice,
     navPayload,
     ruleApplications,
+    runId,
     modelId: result.modelId,
     pagesAnalyzed: result.pages?.length ?? 0,
   };

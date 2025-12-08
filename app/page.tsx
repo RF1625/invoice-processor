@@ -69,6 +69,13 @@ type InvoiceRunDetail = InvoiceRunLog & {
   ruleApplications?: unknown;
 };
 
+type NavPostState = {
+  status: "idle" | "posting" | "success" | "error";
+  runId: string | null;
+  message?: string | null;
+  error?: string | null;
+};
+
 export default function Home() {
   const [file, setFile] = useState<File | null>(null);
   const [filePreviewUrl, setFilePreviewUrl] = useState<string | null>(null);
@@ -76,12 +83,19 @@ export default function Home() {
   const [invoice, setInvoice] = useState<InvoiceSummary | null>(null);
   const [meta, setMeta] = useState<{ pagesAnalyzed: number; modelId?: string } | null>(null);
   const [navPreview, setNavPreview] = useState<NavPreview | null>(null);
+  const [runId, setRunId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [runs, setRuns] = useState<InvoiceRunLog[]>([]);
   const [runsLoading, setRunsLoading] = useState(false);
   const [selectedRun, setSelectedRun] = useState<InvoiceRunDetail | null>(null);
   const [selectedRunLoading, setSelectedRunLoading] = useState(false);
+  const [navPostState, setNavPostState] = useState<NavPostState>({
+    status: "idle",
+    runId: null,
+    message: null,
+    error: null,
+  });
 
   useEffect(() => {
     return () => {
@@ -133,6 +147,28 @@ export default function Home() {
     }
   };
 
+  const postRunToNav = async (id: string) => {
+    setNavPostState({ status: "posting", runId: id, message: null, error: null });
+    try {
+      const res = await fetch(`/api/invoice-runs/${id}/post-to-nav`, { method: "POST" });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Failed to post to NAV");
+      setNavPostState({
+        status: "success",
+        runId: id,
+        message: json.message ?? "NAV accepted payload",
+        error: null,
+      });
+      await loadRuns();
+      if (selectedRun?.id === id) {
+        await loadRunDetail(id);
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to post to NAV";
+      setNavPostState({ status: "error", runId: id, message: null, error: message });
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!file) {
@@ -145,6 +181,8 @@ export default function Home() {
     setInvoice(null);
     setNavPreview(null);
     setMeta(null);
+    setRunId(null);
+    setNavPostState({ status: "idle", runId: null, message: null, error: null });
 
     try {
       const formData = new FormData();
@@ -160,6 +198,8 @@ export default function Home() {
 
       setInvoice(json.invoice ?? null);
       setNavPreview(json.navPreview ?? null);
+      setRunId(json.runId ?? null);
+      setNavPostState({ status: "idle", runId: json.runId ?? null, message: null, error: null });
       setMeta({ pagesAnalyzed: json.pagesAnalyzed ?? 0, modelId: json.modelId });
       loadRuns().catch(() => {});
     } catch (err) {
@@ -354,9 +394,27 @@ export default function Home() {
           <section className="rounded-2xl bg-white p-6 shadow-md ring-1 ring-slate-100">
             <div className="flex items-center justify-between gap-3">
               <h2 className="text-lg font-semibold text-slate-900">NAV journal preview</h2>
-              <div className="text-xs text-slate-600">
-                Vendor: {navPreview.vendorNo}
-                {navPreview.vendorInvoiceNo ? ` • Vendor Invoice #: ${navPreview.vendorInvoiceNo}` : ""}
+              <div className="flex flex-col items-end gap-2 text-xs text-slate-600">
+                <div>
+                  Vendor: {navPreview.vendorNo}
+                  {navPreview.vendorInvoiceNo ? ` • Vendor Invoice #: ${navPreview.vendorInvoiceNo}` : ""}
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => runId && postRunToNav(runId)}
+                    disabled={!runId || navPostState.status === "posting"}
+                    className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-800 shadow-sm hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-400"
+                  >
+                    {navPostState.status === "posting" && navPostState.runId === runId ? "Posting..." : "Send to NAV"}
+                  </button>
+                  {navPostState.runId === runId && navPostState.status === "success" && (
+                    <span className="text-green-700">{navPostState.message ?? "Sent"}</span>
+                  )}
+                  {navPostState.runId === runId && navPostState.status === "error" && (
+                    <span className="text-red-600">{navPostState.error}</span>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -461,11 +519,33 @@ export default function Home() {
 
         {selectedRun && (
           <section className="rounded-2xl bg-white p-6 shadow-md ring-1 ring-slate-100 space-y-3">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-slate-900">Run detail</h2>
-              <div className="text-xs text-slate-600">
-                {selectedRun.fileName ?? "No file"} • {selectedRun.status}
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-semibold text-slate-900">Run detail</h2>
+                <div className="text-xs text-slate-600">
+                  {selectedRun.fileName ?? "No file"} • {selectedRun.status}
+                </div>
               </div>
+              {selectedRun.navPayload ? (
+                <div className="flex flex-col items-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => postRunToNav(selectedRun.id)}
+                    disabled={navPostState.status === "posting"}
+                    className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-800 shadow-sm hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-400"
+                  >
+                    {navPostState.status === "posting" && navPostState.runId === selectedRun.id
+                      ? "Posting..."
+                      : "Send to NAV"}
+                  </button>
+                  {navPostState.runId === selectedRun.id && navPostState.status === "success" && (
+                    <span className="text-xs text-green-700">{navPostState.message ?? "Sent"}</span>
+                  )}
+                  {navPostState.runId === selectedRun.id && navPostState.status === "error" && (
+                    <span className="text-xs text-red-600">{navPostState.error}</span>
+                  )}
+                </div>
+              ) : null}
             </div>
             <div className="grid gap-3 md:grid-cols-3">
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
