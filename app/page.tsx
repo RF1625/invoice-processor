@@ -77,6 +77,8 @@ type NavPostState = {
 };
 
 export default function Home() {
+  const cardClass =
+    "rounded-2xl border border-neutral-200 bg-white shadow-[0_20px_80px_-40px_rgba(15,23,42,0.45)] transition-shadow hover:shadow-[0_24px_90px_-40px_rgba(15,23,42,0.55)]";
   const [file, setFile] = useState<File | null>(null);
   const [filePreviewUrl, setFilePreviewUrl] = useState<string | null>(null);
   const [showOriginal, setShowOriginal] = useState(false);
@@ -212,7 +214,7 @@ export default function Home() {
   const hasItems = useMemo(() => (invoice?.items?.length ?? 0) > 0, [invoice]);
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-200 text-slate-900 p-8">
+    <main className="min-h-screen bg-white p-8 text-slate-900">
       <div className="mx-auto max-w-5xl space-y-8">
         <header className="flex items-center justify-between gap-4">
           <div>
@@ -236,7 +238,7 @@ export default function Home() {
 
         <form
           onSubmit={handleSubmit}
-          className="flex flex-col gap-4 rounded-2xl bg-white p-6 shadow-md ring-1 ring-slate-100"
+          className={`${cardClass} flex flex-col gap-4 p-6`}
         >
           <div className="flex flex-col gap-2">
             <label className="text-sm font-medium text-slate-700" htmlFor="file">
@@ -254,7 +256,7 @@ export default function Home() {
                 if (filePreviewUrl) URL.revokeObjectURL(filePreviewUrl);
                 setFilePreviewUrl(picked ? URL.createObjectURL(picked) : null);
               }}
-              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm"
+              className="rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm shadow-sm"
             />
             <p className="text-xs text-slate-500">We process the file server-side and never store it.</p>
           </div>
@@ -296,7 +298,7 @@ export default function Home() {
         </form>
 
         {showOriginal && filePreviewUrl && (
-          <section className="rounded-2xl bg-white p-4 shadow-md ring-1 ring-slate-100">
+          <section className={`${cardClass} p-4`}>
             <div className="mb-2 flex items-center justify-between">
               <h2 className="text-lg font-semibold text-slate-900">Original document</h2>
               <button
@@ -315,7 +317,7 @@ export default function Home() {
 
         {invoice && (
           <section className="grid gap-4 lg:grid-cols-3">
-            <div className="rounded-2xl bg-white p-6 shadow-md ring-1 ring-slate-100 lg:col-span-2 space-y-4">
+            <div className={`${cardClass} space-y-4 p-6 lg:col-span-2`}>
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <h2 className="text-lg font-semibold text-slate-900">Invoice details</h2>
                 {invoice.currencyCode && (
@@ -355,16 +357,16 @@ export default function Home() {
               </dl>
             </div>
 
-            <div className="rounded-2xl bg-white p-6 shadow-md ring-1 ring-slate-100">
+            <div className={`${cardClass} p-6`}>
               <h2 className="text-lg font-semibold text-slate-900">Items</h2>
               {hasItems ? (
-                <div className="mt-4 overflow-hidden rounded-xl border border-slate-100">
-                  <div className="grid grid-cols-4 bg-slate-50 px-3 py-2 text-xs font-semibold uppercase text-slate-600">
+                <div className="mt-4 overflow-hidden rounded-xl border border-neutral-200">
+                  <div className="grid grid-cols-4 bg-neutral-50 px-3 py-2 text-xs font-semibold uppercase text-slate-600">
                     <span className="col-span-2">Description</span>
                     <span>Qty</span>
                     <span className="text-right">Amount</span>
                   </div>
-                  <ul className="divide-y divide-slate-100">
+                  <ul className="divide-y divide-neutral-200">
                     {invoice.items.map((item, idx) => (
                       <li key={`${item.description ?? "item"}-${idx}`} className="grid grid-cols-4 px-3 py-3 text-sm">
                         <div className="col-span-2">
@@ -391,7 +393,7 @@ export default function Home() {
         )}
 
         {navPreview && (
-          <section className="rounded-2xl bg-white p-6 shadow-md ring-1 ring-slate-100">
+          <section className={`${cardClass} p-6`}>
             <div className="flex items-center justify-between gap-3">
               <h2 className="text-lg font-semibold text-slate-900">NAV journal preview</h2>
               <div className="flex flex-col items-end gap-2 text-xs text-slate-600">
@@ -433,14 +435,14 @@ export default function Home() {
               </div>
             </dl>
 
-            <div className="mt-4 overflow-hidden rounded-xl border border-slate-100">
-              <div className="grid grid-cols-5 bg-slate-50 px-3 py-2 text-xs font-semibold uppercase text-slate-600">
+            <div className="mt-4 overflow-hidden rounded-xl border border-neutral-200">
+              <div className="grid grid-cols-5 bg-neutral-50 px-3 py-2 text-xs font-semibold uppercase text-slate-600">
                 <span className="col-span-2">Description</span>
                 <span>GL Account</span>
                 <span className="text-center">Qty</span>
                 <span className="text-right">Amount</span>
               </div>
-              <ul className="divide-y divide-slate-100">
+              <ul className="divide-y divide-neutral-200">
                 {navPreview.lines.map((line, idx) => (
                   <li key={`${line.description}-${idx}`} className="grid grid-cols-5 px-3 py-3 text-sm">
                     <div className="col-span-2">
@@ -462,7 +464,7 @@ export default function Home() {
           </section>
         )}
 
-        <section className="rounded-2xl bg-white p-6 shadow-md ring-1 ring-slate-100">
+        <section className={`${cardClass} p-6`}>
           <div className="flex items-center justify-between gap-3">
             <h2 className="text-lg font-semibold text-slate-900">Recent runs</h2>
             <button
@@ -474,8 +476,8 @@ export default function Home() {
               {runsLoading ? "Refreshing..." : "Refresh"}
             </button>
           </div>
-          <div className="mt-4 overflow-hidden rounded-xl border border-slate-100">
-            <div className="grid grid-cols-6 bg-slate-50 px-3 py-2 text-xs font-semibold uppercase text-slate-600">
+          <div className="mt-4 overflow-hidden rounded-xl border border-neutral-200">
+            <div className="grid grid-cols-6 bg-neutral-50 px-3 py-2 text-xs font-semibold uppercase text-slate-600">
               <span>Status</span>
               <span>Vendor</span>
               <span>Vendor #</span>
@@ -483,7 +485,7 @@ export default function Home() {
               <span className="text-right">When</span>
               <span className="text-right">Action</span>
             </div>
-            <ul className="divide-y divide-slate-100">
+            <ul className="divide-y divide-neutral-200">
               {runs.length === 0 && (
                 <li className="px-3 py-3 text-sm text-slate-500">No runs logged yet.</li>
               )}
@@ -518,7 +520,7 @@ export default function Home() {
         </section>
 
         {selectedRun && (
-          <section className="rounded-2xl bg-white p-6 shadow-md ring-1 ring-slate-100 space-y-3">
+          <section className={`${cardClass} space-y-3 p-6`}>
             <div className="flex items-center justify-between gap-3">
               <div>
                 <h2 className="text-lg font-semibold text-slate-900">Run detail</h2>
@@ -548,19 +550,19 @@ export default function Home() {
               ) : null}
             </div>
             <div className="grid gap-3 md:grid-cols-3">
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-3">
                 <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Invoice payload</div>
                 <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap text-xs text-slate-800">
                   {JSON.stringify(selectedRun.payload ?? {}, null, 2)}
                 </pre>
               </div>
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-3">
                 <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">NAV payload</div>
                 <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap text-xs text-slate-800">
                   {JSON.stringify(selectedRun.navPayload ?? {}, null, 2)}
                 </pre>
               </div>
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-3">
                 <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Rule applications</div>
                 <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap text-xs text-slate-800">
                   {JSON.stringify(selectedRun.ruleApplications ?? {}, null, 2)}
@@ -582,7 +584,7 @@ type DetailProps = {
 
 function Detail({ label, value, hint }: DetailProps) {
   return (
-    <div className="rounded-xl border border-slate-100 bg-slate-50 p-3">
+    <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-3">
       <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</dt>
       <dd className="mt-1 text-sm font-medium text-slate-900">{value ?? "Not found"}</dd>
       {hint && <p className="text-xs text-slate-500">{hint}</p>}
