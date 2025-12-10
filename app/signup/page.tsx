@@ -28,7 +28,7 @@ export default function SignupPage() {
         setError(json.error ?? "Sign up failed");
         return;
       }
-      router.push("/");
+      router.push("/dashboard");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Sign up failed");
     } finally {

@@ -1,6 +1,13 @@
+import { redirect } from "next/navigation";
+import { getSessionFromCookies } from "@/lib/auth";
 import { CtaButton } from "@/components/cta-button";
 
-export default function Home() {
+export default async function Home() {
+  const session = await getSessionFromCookies();
+  if (session) {
+    redirect("/dashboard");
+  }
+
   return (
     <main className="min-h-screen bg-white text-slate-900">
       <div className="mx-auto flex max-w-6xl flex-col gap-12 px-6 py-16">
