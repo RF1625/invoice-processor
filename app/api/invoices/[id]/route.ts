@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireFirmId } from "@/lib/tenant";
+import { validateRequestOrigin } from "@/lib/auth";
 
 export async function GET(_req: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
@@ -24,6 +25,11 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ id: st
 
 export async function PUT(req: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
+    const originCheck = validateRequestOrigin(req);
+    if (!originCheck.ok) {
+      return NextResponse.json({ error: originCheck.error }, { status: 403 });
+    }
+
     const params = await context.params;
     const firmId = await requireFirmId();
     const body = await req.json();

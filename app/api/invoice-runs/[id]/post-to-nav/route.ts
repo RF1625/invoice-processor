@@ -3,11 +3,18 @@ import { Prisma } from "@/lib/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { postPurchaseInvoice, type NavPurchaseInvoicePayload } from "@/lib/navClient";
 import { requireFirmId } from "@/lib/tenant";
+import { validateRequestOrigin } from "@/lib/auth";
 
 export async function POST(_req: NextRequest, context: { params: Promise<{ id: string }> }) {
   let runId: string | null = null;
 
   try {
+    const req = _req;
+    const originCheck = validateRequestOrigin(req);
+    if (!originCheck.ok) {
+      return NextResponse.json({ error: originCheck.error }, { status: 403 });
+    }
+
     const params = await context.params;
     const firmId = await requireFirmId();
     runId = params.id;
@@ -22,7 +29,8 @@ export async function POST(_req: NextRequest, context: { params: Promise<{ id: s
     }
 
     const navPayload = run.navPayload as unknown as NavPurchaseInvoicePayload;
-    const navResponse = await postPurchaseInvoice(navPayload);
+    const firm = await prisma.firm.findUnique({ where: { id: firmId } });
+    const navResponse = await postPurchaseInvoice(navPayload, firm?.code);
     const navResponseForLog =
       navResponse === undefined || navResponse === null
         ? Prisma.JsonNull
@@ -54,6 +62,7 @@ export async function POST(_req: NextRequest, context: { params: Promise<{ id: s
     );
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to post NAV payload";
+    const status = message.includes("validation") ? 400 : 500;
     if (runId) {
       await prisma.run
         .update({
@@ -78,6 +87,6 @@ export async function POST(_req: NextRequest, context: { params: Promise<{ id: s
           .catch(() => {});
       }
     }
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: message }, { status });
   }
 }

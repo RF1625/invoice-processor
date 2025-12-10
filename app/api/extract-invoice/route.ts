@@ -2,9 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 import crypto from "node:crypto";
 import { analyzeInvoiceBuffer, MAX_INVOICE_FILE_BYTES } from "@/lib/invoiceAnalyzer";
 import { requireFirmId } from "@/lib/tenant";
+import { ValidationError } from "@/lib/ruleEngine";
+import { validateRequestOrigin } from "@/lib/auth";
 
 export async function POST(req: NextRequest) {
   try {
+    const originCheck = validateRequestOrigin(req);
+    if (!originCheck.ok) {
+      return NextResponse.json({ error: originCheck.error }, { status: 403 });
+    }
+
     if (!process.env.AZURE_DOCINT_ENDPOINT || !process.env.AZURE_DOCINT_KEY) {
       return NextResponse.json(
         { error: "Missing AZURE_DOCINT_ENDPOINT or AZURE_DOCINT_KEY env vars" },
@@ -65,6 +72,7 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     console.error("Invoice analysis failed", err);
     const message = err instanceof Error ? err.message : "Failed to analyze invoice";
-    return NextResponse.json({ error: "Failed to analyze invoice", details: message }, { status: 500 });
+    const status = err instanceof ValidationError || (err as { statusCode?: number })?.statusCode === 400 ? 400 : 500;
+    return NextResponse.json({ error: "Failed to analyze invoice", details: message }, { status });
   }
 }

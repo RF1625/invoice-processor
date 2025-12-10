@@ -21,13 +21,21 @@ export async function getDefaultFirmId() {
 export async function resolveFirmId() {
   const session = await getSessionFromCookies();
   if (session?.firmId) return session.firmId;
-  return getDefaultFirmId();
+  return null;
 }
 
 export async function requireFirmId() {
-  const firmId = await resolveFirmId();
-  if (!firmId) {
-    throw new Error("No firm configured");
+  const session = await getSessionFromCookies();
+  if (!session?.firmId) {
+    throw new Error("Unauthorized");
   }
-  return firmId;
+  return session.firmId;
+}
+
+export async function requireSession() {
+  const session = await getSessionFromCookies();
+  if (!session) {
+    throw new Error("Unauthorized");
+  }
+  return session;
 }

@@ -10,8 +10,23 @@ const createPool = () => {
 
   const config: PoolConfig = { connectionString };
 
-  // Support SSL when available (e.g., Azure Database for PostgreSQL)
-  if (process.env.PGSSL === "true") {
+  // Enable SSL when explicitly requested or implied by the connection string (e.g., sslmode=require for Supabase)
+  let sslFromUrl = false;
+  try {
+    const url = new URL(connectionString);
+    const sslMode = url.searchParams.get("sslmode")?.toLowerCase();
+    const sslFlag = url.searchParams.get("ssl")?.toLowerCase();
+    sslFromUrl =
+      sslFlag === "true" ||
+      sslMode === "require" ||
+      sslMode === "prefer" ||
+      sslMode === "verify-ca" ||
+      sslMode === "verify-full";
+  } catch {
+    // Ignore malformed URL; fall back to env flag.
+  }
+
+  if (process.env.PGSSL === "true" || sslFromUrl) {
     config.ssl = { rejectUnauthorized: false };
   }
 

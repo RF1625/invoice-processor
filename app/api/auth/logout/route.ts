@@ -1,9 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { SESSION_COOKIE_NAME } from "@/lib/auth";
+import { SESSION_COOKIE_NAME, validateRequestOrigin } from "@/lib/auth";
 
 export async function POST(req: NextRequest) {
   try {
+    const originCheck = validateRequestOrigin(req);
+    if (!originCheck.ok) {
+      return NextResponse.json({ error: originCheck.error }, { status: 403 });
+    }
+
     const token =
       req.cookies.get(SESSION_COOKIE_NAME)?.value ??
       (req.headers.get("cookie") ?? "")

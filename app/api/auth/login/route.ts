@@ -1,10 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { buildSessionCookie, createSession, verifyPassword } from "@/lib/auth";
+import { buildSessionCookie, createSession, verifyPassword, validateRequestOrigin } from "@/lib/auth";
 import { getDefaultFirmId } from "@/lib/tenant";
 
 export async function POST(req: NextRequest) {
   try {
+    const originCheck = validateRequestOrigin(req);
+    if (!originCheck.ok) {
+      return NextResponse.json({ error: originCheck.error }, { status: 403 });
+    }
+
     const body = await req.json();
     const email = (body.email ?? "").toString().trim().toLowerCase();
     const password = (body.password ?? "").toString();

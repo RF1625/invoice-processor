@@ -10,7 +10,8 @@
     "lint": "eslint",
     "db:migrate": "node scripts/runMigrations.js",
     "prisma:generate": "prisma generate",
-    "db:seed": "node scripts/seedNavData.js"
+    "db:seed": "node scripts/seedNavData.js",
+    "test": "tap"
   },
   "dependencies": {
     "@azure/ai-form-recognizer": "^5.1.0",

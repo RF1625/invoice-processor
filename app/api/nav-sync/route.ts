@@ -1,17 +1,24 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { validateRequestOrigin } from "@/lib/auth";
 import { getDimensions, getGlAccounts, getVendors } from "@/lib/navClient";
 import { prisma } from "@/lib/prisma";
 import { requireFirmId } from "@/lib/tenant";
 
-export async function POST() {
+export async function POST(req: NextRequest) {
   try {
+    const originCheck = validateRequestOrigin(req);
+    if (!originCheck.ok) {
+      return NextResponse.json({ error: originCheck.error }, { status: 403 });
+    }
+
     const firmId = await requireFirmId();
+    const firm = await prisma.firm.findUnique({ where: { id: firmId } });
     const useMock = process.env.NAV_USE_MOCK === "true";
 
     const [vendors, glAccounts, dimensions] = await Promise.all([
-      getVendors(),
-      getGlAccounts(),
-      getDimensions(),
+      getVendors(firm?.code),
+      getGlAccounts(firm?.code),
+      getDimensions(firm?.code),
     ]);
 
     for (const v of vendors) {

@@ -33,10 +33,34 @@ async function main() {
 
   const client = await pool.connect();
   try {
-    for (const file of files) {
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS schema_migrations (
+        id TEXT PRIMARY KEY,
+        applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+
+    const appliedRes = await client.query("SELECT id FROM schema_migrations");
+    const applied = new Set(appliedRes.rows.map((r) => r.id));
+
+    const pending = files.filter((file) => !applied.has(file));
+    if (pending.length === 0) {
+      console.log("No pending migrations.");
+      return;
+    }
+
+    for (const file of pending) {
       const sql = fs.readFileSync(path.join(migrationsDir, file), "utf8");
       console.log(`Running migration: ${file}`);
-      await client.query(sql);
+      await client.query("BEGIN");
+      try {
+        await client.query(sql);
+        await client.query("INSERT INTO schema_migrations (id, applied_at) VALUES ($1, NOW())", [file]);
+        await client.query("COMMIT");
+      } catch (err) {
+        await client.query("ROLLBACK");
+        throw err;
+      }
     }
     console.log("Migrations completed.");
   } finally {

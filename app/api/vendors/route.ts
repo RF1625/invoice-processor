@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireFirmId } from "@/lib/tenant";
+import { validateRequestOrigin } from "@/lib/auth";
 
 export async function GET() {
   const firmId = await requireFirmId();
@@ -18,6 +19,11 @@ const parseJson = (raw: unknown) => {
 
 export async function POST(req: NextRequest) {
   try {
+    const originCheck = validateRequestOrigin(req);
+    if (!originCheck.ok) {
+      return NextResponse.json({ error: originCheck.error }, { status: 403 });
+    }
+
     const firmId = await requireFirmId();
     const body = await req.json();
     const vendor = await prisma.vendor.create({

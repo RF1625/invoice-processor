@@ -267,19 +267,23 @@ export async function ingestMailbox(mailbox: MailboxRecord) {
     for await (const message of client.fetch(search, { envelope: true, bodyStructure: true })) {
       if (handled >= maxMessages) break;
       handled += 1;
-      lastSeenUid = Math.max(lastSeenUid, Number(message.uid));
+      const currentUid = Number(message.uid);
+      let markSeen = false;
+      let moveAfter = false;
+      let messageFailed = false;
+      let attachmentProcessed = false;
 
       const subject = message.envelope?.subject ?? "";
       if (!shouldProcessMessage(allowedSenders, subjectKeywords, message)) {
         skipped.push({ uid: Number(message.uid), subject, reason: "Filtered by sender/subject" });
-        await client.messageFlagsAdd(message.uid, ["\\Seen"]);
+        markSeen = true;
         continue;
       }
 
       const attachments = collectPdfAttachments(message.bodyStructure);
       if (attachments.length === 0) {
         skipped.push({ uid: Number(message.uid), subject, reason: "No PDF attachments" });
-        await client.messageFlagsAdd(message.uid, ["\\Seen"]);
+        markSeen = true;
         continue;
       }
 
@@ -290,6 +294,7 @@ export async function ingestMailbox(mailbox: MailboxRecord) {
             subject,
             reason: `Attachment too large (${attachment.size} bytes)`,
           });
+          messageFailed = true;
           continue;
         }
 
@@ -315,14 +320,24 @@ export async function ingestMailbox(mailbox: MailboxRecord) {
             fileName: attachment.filename,
             invoiceId: processedInvoice.invoiceId ?? null,
           });
+          attachmentProcessed = true;
+          moveAfter = true;
         } catch (err) {
           const messageText = err instanceof Error ? err.message : "Failed to process attachment";
           skipped.push({ uid: Number(message.uid), subject, reason: messageText });
+          messageFailed = true;
         }
       }
 
-      await client.messageFlagsAdd(message.uid, ["\\Seen"]);
-      if (processedMailbox) {
+      if (!messageFailed || (attachmentProcessed && !messageFailed)) {
+        markSeen = true;
+      }
+
+      if (markSeen) {
+        await client.messageFlagsAdd(message.uid, ["\\Seen"]);
+        lastSeenUid = Math.max(lastSeenUid, currentUid);
+      }
+      if (moveAfter && !messageFailed && processedMailbox) {
         try {
           await client.messageMove(message.uid, processedMailbox);
         } catch (err) {

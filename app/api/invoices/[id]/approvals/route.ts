@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireFirmId } from "@/lib/tenant";
+import { validateRequestOrigin } from "@/lib/auth";
 
 const normalizeStatus = (raw: unknown) => {
   const value = (raw ?? "").toString().toLowerCase();
@@ -11,6 +12,11 @@ const normalizeStatus = (raw: unknown) => {
 
 export async function POST(req: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
+    const originCheck = validateRequestOrigin(req);
+    if (!originCheck.ok) {
+      return NextResponse.json({ error: originCheck.error }, { status: 403 });
+    }
+
     const params = await context.params;
     const firmId = await requireFirmId();
     const body = await req.json();

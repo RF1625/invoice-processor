@@ -3,25 +3,38 @@ import { fetchMailboxesForIngest, ingestMailbox } from "@/lib/mailboxIngest";
 
 export const runtime = "nodejs";
 
-const requireToken = process.env.EMAIL_INGEST_TOKEN;
+const requiredToken = process.env.EMAIL_INGEST_TOKEN;
 
 export async function POST(req: NextRequest) {
   try {
-    if (requireToken) {
-      const token = req.nextUrl.searchParams.get("token");
-      if (token !== requireToken) {
-        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!requiredToken) {
+      return NextResponse.json({ error: "EMAIL_INGEST_TOKEN is not configured" }, { status: 500 });
+    }
+
+    let parsedBody: any = null;
+    const readBody = async () => {
+      if (parsedBody !== null) return parsedBody;
+      try {
+        parsedBody = await req.json();
+      } catch {
+        parsedBody = null;
       }
+      return parsedBody;
+    };
+
+    const tokenFromRequest =
+      req.nextUrl.searchParams.get("token") ??
+      req.headers.get("x-email-ingest-token") ??
+      (await readBody())?.token;
+
+    if (tokenFromRequest !== requiredToken) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     let mailboxId = req.nextUrl.searchParams.get("mailboxId");
     if (!mailboxId) {
-      try {
-        const body = await req.json();
-        mailboxId = body?.mailboxId ?? body?.id ?? null;
-      } catch {
-        // No JSON body supplied; proceed with defaults
-      }
+      const body = await readBody();
+      mailboxId = body?.mailboxId ?? body?.id ?? null;
     }
 
     const mailboxes = await fetchMailboxesForIngest(mailboxId);

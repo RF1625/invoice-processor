@@ -5,6 +5,7 @@ import {
   type DocumentField,
 } from "@azure/ai-form-recognizer";
 import { applyVendorRulesAndLog, type ParsedInvoice, type ParsedInvoiceItem } from "./ruleEngine";
+import { persistFile } from "./storage";
 
 const endpoint = process.env.AZURE_DOCINT_ENDPOINT;
 const key = process.env.AZURE_DOCINT_KEY;
@@ -141,6 +142,10 @@ export async function analyzeInvoiceBuffer(
 
   if (buffer.byteLength > MAX_INVOICE_FILE_BYTES) {
     throw new Error("File too large. Please upload a file under 10MB.");
+  }
+
+  if (opts?.fileMeta?.storagePath) {
+    await persistFile(buffer, opts.fileMeta.storagePath);
   }
 
   const poller = await getClient().beginAnalyzeDocument("prebuilt-invoice", buffer);

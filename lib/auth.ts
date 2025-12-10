@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import bcrypt from "bcryptjs";
 import { cookies, headers } from "next/headers";
+import { type NextRequest } from "next/server";
 import { prisma } from "./prisma";
 
 export const SESSION_COOKIE_NAME = "session_token";
@@ -67,3 +68,30 @@ const parseCookieHeader = (raw: string) =>
     if (k) acc[k] = decodeURIComponent(v ?? "");
     return acc;
   }, {});
+
+export function validateRequestOrigin(req: NextRequest) {
+  const method = req.method.toUpperCase();
+  if (method === "GET" || method === "HEAD" || method === "OPTIONS") {
+    return { ok: true as const };
+  }
+
+  const expectedOrigin = `${req.nextUrl.protocol}//${req.nextUrl.host}`;
+  const origin = req.headers.get("origin");
+  if (origin && origin !== expectedOrigin) {
+    return { ok: false as const, error: "Invalid origin" };
+  }
+
+  const referer = req.headers.get("referer");
+  if (referer) {
+    try {
+      const refererOrigin = new URL(referer).origin;
+      if (refererOrigin !== expectedOrigin) {
+        return { ok: false as const, error: "Invalid origin" };
+      }
+    } catch {
+      return { ok: false as const, error: "Invalid origin" };
+    }
+  }
+
+  return { ok: true as const };
+}

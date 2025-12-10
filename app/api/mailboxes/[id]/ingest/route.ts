@@ -1,12 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getSessionFromCookies } from "@/lib/auth";
+import { getSessionFromCookies, validateRequestOrigin } from "@/lib/auth";
 import { ingestMailbox } from "@/lib/mailboxIngest";
 
 export async function POST(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getSessionFromCookies();
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const originCheck = validateRequestOrigin(_req);
+  if (!originCheck.ok) {
+    return NextResponse.json({ error: originCheck.error }, { status: 403 });
   }
 
   try {

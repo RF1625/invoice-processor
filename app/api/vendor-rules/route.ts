@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireFirmId } from "@/lib/tenant";
+import { validateRequestOrigin } from "@/lib/auth";
 
 const parseJson = (raw: unknown) => {
   if (typeof raw === "string" && raw.trim().length > 0) {
@@ -22,6 +23,11 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
+    const originCheck = validateRequestOrigin(req);
+    if (!originCheck.ok) {
+      return NextResponse.json({ error: originCheck.error }, { status: 403 });
+    }
+
     const firmId = await requireFirmId();
     const body = await req.json();
     const rule = await prisma.vendorRule.create({

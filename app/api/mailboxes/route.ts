@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@/lib/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
-import { getSessionFromCookies } from "@/lib/auth";
+import { getSessionFromCookies, validateRequestOrigin } from "@/lib/auth";
 import { encryptSecret } from "@/lib/secretVault";
 import { sanitizeMailbox } from "@/lib/mailboxIngest";
 
@@ -31,6 +31,11 @@ export async function POST(req: NextRequest) {
   }
 
   try {
+    const originCheck = validateRequestOrigin(req);
+    if (!originCheck.ok) {
+      return NextResponse.json({ error: originCheck.error }, { status: 403 });
+    }
+
     const body = await req.json();
     const {
       id,

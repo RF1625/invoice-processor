@@ -1,9 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireFirmId } from "@/lib/tenant";
+import { validateRequestOrigin } from "@/lib/auth";
 
 export async function PUT(req: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
+    const originCheck = validateRequestOrigin(req);
+    if (!originCheck.ok) {
+      return NextResponse.json({ error: originCheck.error }, { status: 403 });
+    }
+
     const params = await context.params;
     const firmId = await requireFirmId();
     const existing = await prisma.glAccount.findFirst({ where: { id: params.id, firmId } });
@@ -27,6 +33,12 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
 
 export async function DELETE(_req: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
+    const req = _req;
+    const originCheck = validateRequestOrigin(req);
+    if (!originCheck.ok) {
+      return NextResponse.json({ error: originCheck.error }, { status: 403 });
+    }
+
     const params = await context.params;
     const firmId = await requireFirmId();
     const existing = await prisma.glAccount.findFirst({ where: { id: params.id, firmId } });
