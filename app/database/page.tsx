@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { VendorManager, RuleManager, GlAccountManager, DimensionManager } from "./forms";
-import type { MatchType } from "@/lib/generated/prisma/client";
+import type { MatchType } from "@prisma/client";
 import { InvoiceApprovalsLoader } from "./invoice-approvals-loader";
 
 type VendorInput = {

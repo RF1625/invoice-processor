@@ -68,7 +68,7 @@ Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/bui
 ## Prisma
 
 - Schema: `prisma/schema.prisma` mirrors the SQL schema (vendors, G/L accounts, dimensions, vendor rules, runs).
-- Generate client: `npm run prisma:generate` (outputs to `lib/generated/prisma`).
+- Generate client: `npm run prisma:generate` (outputs to `.prisma/client` via `@prisma/client`).
 - Datasource: `DATABASE_URL` (uses SSL when `PGSSL=true` in `lib/db.ts`).
 
 ## Email invoice ingest

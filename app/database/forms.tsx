@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import type { MatchType } from "@/lib/generated/prisma/client";
+import type { MatchType } from "@prisma/client";
 
 type VendorInput = {
   id: string;
