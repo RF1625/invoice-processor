@@ -1,10 +1,12 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireFirmId } from "@/lib/tenant";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
     const firmId = await requireFirmId();
+    const takeParam = Number(req.nextUrl.searchParams.get("take") ?? "10");
+    const take = Number.isFinite(takeParam) && takeParam > 0 ? Math.min(Math.floor(takeParam), 50) : 10;
     const invoices = await prisma.invoice.findMany({
       where: { firmId },
       include: {
@@ -12,7 +14,7 @@ export async function GET() {
         approvals: { orderBy: { createdAt: "desc" } },
       },
       orderBy: { createdAt: "desc" },
-      take: 25,
+      take,
     });
 
     return NextResponse.json({ invoices }, { status: 200 });

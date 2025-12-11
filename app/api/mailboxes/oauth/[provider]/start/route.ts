@@ -60,6 +60,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ prov
     url.searchParams.set("response_type", "code");
     url.searchParams.set("scope", scopes);
     url.searchParams.set("state", state);
+    url.searchParams.set("prompt", "select_account");
 
     const res = NextResponse.redirect(url.toString(), { status: 302 });
     res.cookies.set({
