@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { VendorManager, RuleManager, GlAccountManager, DimensionManager } from "./forms";
+import type { MatchType } from "@/lib/generated/prisma/client";
 import { InvoiceApprovalsLoader } from "./invoice-approvals-loader";
 
 type VendorInput = {
@@ -22,7 +23,7 @@ type RuleInput = {
   id: string;
   vendorId: string;
   priority: number;
-  matchType: string;
+  matchType: MatchType;
   matchValue?: string | null;
   glAccountNo?: string | null;
   dimensionOverrides?: Record<string, string> | null;
@@ -86,7 +87,15 @@ export default function DatabasePage() {
       setDimensions(dimJson.dimensions ?? []);
       setRules(
         (ruleJson.rules ?? []).map((r: any) => ({
-          ...r,
+          id: r.id,
+          vendorId: r.vendorId,
+          priority: r.priority,
+          matchType: r.matchType as MatchType,
+          matchValue: r.matchValue ?? null,
+          glAccountNo: r.glAccountNo ?? null,
+          dimensionOverrides: r.dimensionOverrides ?? null,
+          active: r.active,
+          comment: r.comment ?? null,
           vendorName: r.vendor?.name ?? null,
         })),
       );
