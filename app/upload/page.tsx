@@ -156,14 +156,14 @@ export default function UploadPage() {
                   <p className="mt-3 text-xs text-slate-600">Run ID: {result.runId}</p>
                 )}
               </div>
-              {result.navPreview && (
+              {result.navPreview ? (
                 <details className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-800">
                   <summary className="cursor-pointer text-sm font-semibold text-slate-900">NAV preview payload</summary>
                   <pre className="mt-2 overflow-auto rounded-lg bg-slate-900 p-3 text-xs text-slate-50">
                     {JSON.stringify(result.navPreview, null, 2)}
                   </pre>
                 </details>
-              )}
+              ) : null}
             </div>
           )}
         </section>
