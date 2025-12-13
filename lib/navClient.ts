@@ -6,6 +6,7 @@ type NavConfig = {
   user: string;
   password: string;
   purchasePath: string;
+  purchaseOrderPath: string;
 };
 
 export type NavDimensionSet = Record<string, string>;
@@ -29,6 +30,16 @@ export type NavPurchaseInvoicePayload = {
   lines: NavPurchaseInvoiceLine[];
 };
 
+export type NavPurchaseOrderPayload = {
+  vendorNo: string;
+  externalDocumentNo?: string;
+  orderDate?: string;
+  expectedDate?: string;
+  currencyCode?: string;
+  dimensions?: NavDimensionSet;
+  lines: NavPurchaseInvoiceLine[];
+};
+
 const useMock = process.env.NAV_USE_MOCK === "true";
 
 const resolveNavConfig = (firmCode?: string | null): NavConfig => {
@@ -39,6 +50,8 @@ const resolveNavConfig = (firmCode?: string | null): NavConfig => {
   const password = process.env[`NAV_PASSWORD${suffix}`] ?? process.env.NAV_PASSWORD ?? null;
   const purchasePath =
     process.env[`NAV_PURCHASE_INVOICE_PATH${suffix}`] ?? process.env.NAV_PURCHASE_INVOICE_PATH ?? "PurchaseInvoices";
+  const purchaseOrderPath =
+    process.env[`NAV_PURCHASE_ORDER_PATH${suffix}`] ?? process.env.NAV_PURCHASE_ORDER_PATH ?? "PurchaseOrders";
 
   if (!baseUrl || !company || !user || !password) {
     throw new Error("NAV client not configured. Set NAV_BASE_URL, NAV_COMPANY, NAV_USER, and NAV_PASSWORD.");
@@ -50,10 +63,11 @@ const resolveNavConfig = (firmCode?: string | null): NavConfig => {
     user,
     password,
     purchasePath,
+    purchaseOrderPath,
   };
 };
 
-export const validateNavPayload = (payload: NavPurchaseInvoicePayload) => {
+export const validateNavPayload = (payload: NavPurchaseInvoicePayload | NavPurchaseOrderPayload) => {
   const errors: string[] = [];
   if (!payload.vendorNo) errors.push("vendorNo is required");
   if (!payload.lines.length) errors.push("at least one line is required");
@@ -142,4 +156,42 @@ export async function postPurchaseInvoice(payload: NavPurchaseInvoicePayload, fi
   }
 
   return { status: "ok", message: "NAV accepted payload", data };
+}
+
+export async function postPurchaseOrder(payload: NavPurchaseOrderPayload, firmCode?: string | null) {
+  if (useMock) {
+    console.info("[NAV MOCK] postPurchaseOrder payload", JSON.stringify(payload, null, 2));
+    return { status: "mocked", message: "NAV_USE_MOCK=true, payload logged only" };
+  }
+
+  validateNavPayload(payload);
+  const config = resolveNavConfig(firmCode);
+
+  const targetUrl = `${config.baseUrl}/Company('${encodeURIComponent(config.company)}')/${config.purchaseOrderPath}`;
+  const authHeader = `Basic ${Buffer.from(`${config.user}:${config.password}`).toString("base64")}`;
+
+  const res = await fetchWithRetry(targetUrl, {
+    method: "POST",
+    headers: {
+      Authorization: authHeader,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const text = await res.text();
+  let data: unknown = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = text;
+  }
+
+  if (!res.ok) {
+    const detail = typeof data === "string" ? data : JSON.stringify(data);
+    throw new Error(`NAV request failed (${res.status}): ${detail}`);
+  }
+
+  return { status: "ok", message: "NAV accepted PO payload", data };
 }

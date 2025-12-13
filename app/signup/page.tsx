@@ -37,7 +37,7 @@ export default function SignupPage() {
   };
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-200 px-6 py-12 text-slate-900">
+    <main className="min-h-screen bg-white px-6 py-12 text-slate-900">
       <div className="mx-auto max-w-md space-y-8 rounded-2xl bg-white p-8 shadow-xl ring-1 ring-slate-100">
         <div className="space-y-2">
           <p className="text-xs uppercase tracking-wide text-slate-500">Create account</p>

@@ -9,6 +9,13 @@ const { Pool } = require("pg");
 
 const migrationsDir = path.join(process.cwd(), "db", "migrations");
 
+const shouldRunInTransaction = (sql) => {
+  // Postgres does not allow ALTER TYPE ... ADD VALUE inside an explicit transaction block,
+  // and PgBouncer/Supabase poolers can disconnect on such DDL even if it succeeds.
+  if (/ALTER\s+TYPE\s+[\w".]+\s+ADD\s+VALUE/i.test(sql)) return false;
+  return true;
+};
+
 async function main() {
   const { DATABASE_URL, PGSSL } = process.env;
   if (!DATABASE_URL) {
@@ -19,6 +26,13 @@ async function main() {
   const pool = new Pool({
     connectionString: DATABASE_URL,
     ssl: PGSSL === "true" ? { rejectUnauthorized: false } : undefined,
+  });
+
+  // Avoid crashing on transient/idle client errors (common with poolers) after work is done.
+  let shuttingDown = false;
+  pool.on("error", (err) => {
+    if (shuttingDown) return;
+    console.error("Postgres pool error", err);
   });
 
   const files = fs
@@ -52,19 +66,26 @@ async function main() {
     for (const file of pending) {
       const sql = fs.readFileSync(path.join(migrationsDir, file), "utf8");
       console.log(`Running migration: ${file}`);
-      await client.query("BEGIN");
-      try {
+      const useTransaction = shouldRunInTransaction(sql);
+      if (useTransaction) {
+        await client.query("BEGIN");
+        try {
+          await client.query(sql);
+          await client.query("INSERT INTO schema_migrations (id, applied_at) VALUES ($1, NOW())", [file]);
+          await client.query("COMMIT");
+        } catch (err) {
+          await client.query("ROLLBACK");
+          throw err;
+        }
+      } else {
         await client.query(sql);
         await client.query("INSERT INTO schema_migrations (id, applied_at) VALUES ($1, NOW())", [file]);
-        await client.query("COMMIT");
-      } catch (err) {
-        await client.query("ROLLBACK");
-        throw err;
       }
     }
     console.log("Migrations completed.");
   } finally {
     client.release();
+    shuttingDown = true;
     await pool.end();
   }
 }

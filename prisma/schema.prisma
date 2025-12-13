@@ -12,9 +12,20 @@ enum MatchType {
   description_contains
   description_regex
   amount_equals
+  amount_lt
+  amount_lte
+  amount_gt
+  amount_gte
   always
 
   @@map("match_type")
+}
+
+enum ApprovalPolicy {
+  none
+  manager
+
+  @@map("approval_policy")
 }
 
 model Firm {
@@ -27,6 +38,7 @@ model Firm {
   glAccounts GlAccount[]
   dimensions Dimension[]
   vendorRules VendorRule[]
+  vendorAliases VendorAlias[]
   runs       Run[]
   invoices   Invoice[]
   invoiceLines InvoiceLine[]
@@ -38,6 +50,15 @@ model Firm {
   invoiceApprovals InvoiceApproval[]
   invitations InvitationToken[]
   mailboxes  Mailbox[]
+  purchaseOrders PurchaseOrder[]
+  purchaseOrderLines PurchaseOrderLine[]
+  purchaseOrderReceipts PurchaseOrderReceipt[]
+  approvalUserSetups ApprovalUserSetup[]
+  invoiceApprovalPlans InvoiceApprovalPlan[]
+  invoiceApprovalScopes InvoiceApprovalScope[]
+  invoiceApprovalSteps InvoiceApprovalStep[]
+  rulesets   Ruleset[]
+  ruleApplyLogs RuleApplyLog[]
 
   @@unique([code])
   @@map("firms")
@@ -55,6 +76,9 @@ model User {
   passwordResetTokens PasswordResetToken[]
   invitationsSent   InvitationToken[] @relation("InvitationSent")
   invitationsAccepted InvitationToken[] @relation("InvitationAccepted")
+  approvalSetups     ApprovalUserSetup[] @relation("ApprovalSetupUser")
+  approvalSetupAsApprover ApprovalUserSetup[] @relation("ApprovalSetupApprover")
+  approvalSetupAsSubstitute ApprovalUserSetup[] @relation("ApprovalSetupSubstitute")
   vendorCreated   Vendor[] @relation("VendorCreatedBy")
   vendorUpdated   Vendor[] @relation("VendorUpdatedBy")
   glAccountCreated GlAccount[] @relation("GlAccountCreatedBy")
@@ -63,14 +87,45 @@ model User {
   dimensionUpdated Dimension[] @relation("DimensionUpdatedBy")
   vendorRuleCreated VendorRule[] @relation("VendorRuleCreatedBy")
   vendorRuleUpdated VendorRule[] @relation("VendorRuleUpdatedBy")
+  rulesetsCreated Ruleset[] @relation("RulesetCreatedBy")
+  rulesetsUpdated Ruleset[] @relation("RulesetUpdatedBy")
+  ruleVersionsCreated RuleVersion[] @relation("RuleVersionCreatedBy")
+  ruleApplyLogsApplied RuleApplyLog[] @relation("RuleApplyLogAppliedBy")
+  purchaseOrdersCreated PurchaseOrder[] @relation("PurchaseOrderCreatedBy")
+  purchaseOrdersUpdated PurchaseOrder[] @relation("PurchaseOrderUpdatedBy")
   invoiceCreated Invoice[] @relation("InvoiceCreatedBy")
   invoiceUpdated Invoice[] @relation("InvoiceUpdatedBy")
   invoiceApprovals InvoiceApproval[]
   mailboxes       Mailbox[]
+  requestedApprovalPlans InvoiceApprovalPlan[] @relation("InvoiceApprovalPlanRequester")
+  invoiceApprovalStepsToApprove InvoiceApprovalStep[] @relation("InvoiceApprovalStepApprover")
+  invoiceApprovalStepsActed InvoiceApprovalStep[] @relation("InvoiceApprovalStepActedBy")
   createdAt      DateTime          @default(now()) @map("created_at")
   updatedAt      DateTime          @default(now()) @updatedAt @map("updated_at")
 
   @@map("users")
+}
+
+model ApprovalUserSetup {
+  id               String   @id @default(dbgenerated("(md5(random()::text || clock_timestamp()::text))::uuid")) @db.Uuid
+  firmId           String   @map("firm_id") @db.Uuid
+  firm             Firm     @relation(fields: [firmId], references: [id])
+  userId           String   @map("user_id") @db.Uuid
+  user             User     @relation("ApprovalSetupUser", fields: [userId], references: [id])
+  approverUserId   String?  @map("approver_user_id") @db.Uuid
+  approverUser     User?    @relation("ApprovalSetupApprover", fields: [approverUserId], references: [id])
+  approvalLimit    Decimal? @map("approval_limit") @db.Decimal(18, 2)
+  substituteUserId String?  @map("substitute_user_id") @db.Uuid
+  substituteUser   User?    @relation("ApprovalSetupSubstitute", fields: [substituteUserId], references: [id])
+  substituteFrom   DateTime? @map("substitute_from")
+  substituteTo     DateTime? @map("substitute_to")
+  active           Boolean  @default(true)
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@unique([firmId, userId])
+  @@index([firmId, approverUserId])
+  @@map("approval_user_setups")
 }
 
 model Vendor {
@@ -82,6 +137,7 @@ model Vendor {
   gstNumber          String?     @map("gst_number")
   defaultDimensions  Json?       @map("default_dimensions")
   defaultCurrency    String?     @map("default_currency")
+  defaultApprovalPolicy ApprovalPolicy @default(manager) @map("default_approval_policy")
   active             Boolean     @default(true)
   createdBy          String?     @map("created_by") @db.Uuid
   updatedBy          String?     @map("updated_by") @db.Uuid
@@ -90,11 +146,31 @@ model Vendor {
   createdAt          DateTime    @default(now()) @map("created_at")
   updatedAt          DateTime    @default(now()) @updatedAt @map("updated_at")
   rules              VendorRule[]
+  aliases            VendorAlias[]
+  rulesets           Ruleset[]
   runs               Run[]
   invoices           Invoice[]
+  purchaseOrders     PurchaseOrder[]
 
   @@unique([firmId, vendorNo])
   @@map("vendors")
+}
+
+model VendorAlias {
+  id             String   @id @default(dbgenerated("(md5(random()::text || clock_timestamp()::text))::uuid")) @db.Uuid
+  firmId         String   @map("firm_id") @db.Uuid
+  firm           Firm     @relation(fields: [firmId], references: [id])
+  vendorId       String   @map("vendor_id") @db.Uuid
+  vendor         Vendor   @relation(fields: [vendorId], references: [id])
+  aliasText      String   @map("alias_text")
+  confidenceHint Decimal  @default(1.0) @map("confidence_hint") @db.Decimal(5, 4)
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@unique([vendorId, aliasText])
+  @@index([firmId, aliasText])
+  @@index([vendorId])
+  @@map("vendor_aliases")
 }
 
 model GlAccount {
@@ -198,6 +274,11 @@ model Invoice {
   taxAmount       Decimal       @default(0) @map("tax_amount") @db.Decimal(18, 2)
   netAmount       Decimal       @default(0) @map("net_amount") @db.Decimal(18, 2)
   originalPayload Json?         @map("original_payload")
+  canonicalJson   Json?         @map("canonical_json")
+  azureRawJson    Json?         @map("azure_raw_json")
+  vendorMatchStatus String      @default("unmatched") @map("vendor_match_status")
+  vendorMatchConfidence Decimal? @map("vendor_match_confidence") @db.Decimal(5, 4)
+  recommendedApprovalPolicy ApprovalPolicy? @map("recommended_approval_policy")
   navDocumentNo   String?       @map("nav_document_no")
   navStatus       String?       @map("nav_status")
   lockedAt        DateTime?     @map("locked_at")
@@ -212,6 +293,10 @@ model Invoice {
   files           File[]
   navPostLogs     NavPostLog[]
   approvals       InvoiceApproval[]
+  approvalPlans   InvoiceApprovalPlan[]
+  approvalScopes  InvoiceApprovalScope[]
+  approvalSteps   InvoiceApprovalStep[]
+  ruleApplyLogs   RuleApplyLog[]
 
   @@unique([firmId, invoiceNo])
   @@map("invoices")
@@ -230,8 +315,12 @@ model InvoiceLine {
   lineAmount      Decimal   @default(0) @map("line_amount") @db.Decimal(18, 2)
   glAccountNo     String?   @map("gl_account_no")
   dimensionValues Json      @default(dbgenerated("'{}'::jsonb")) @map("dimension_values")
+  canonicalJson   Json?     @map("canonical_json")
   taxCode         String?   @map("tax_code")
   taxRate         Decimal?  @map("tax_rate") @db.Decimal(10, 4)
+  poLineId        String?   @map("po_line_id") @db.Uuid
+  poLine          PurchaseOrderLine? @relation(fields: [poLineId], references: [id])
+  matchedQuantity Decimal   @default(0) @map("matched_quantity") @db.Decimal(18, 4)
   active          Boolean   @default(true)
   createdAt       DateTime  @default(now()) @map("created_at")
   updatedAt       DateTime  @default(now()) @updatedAt @map("updated_at")
@@ -239,6 +328,138 @@ model InvoiceLine {
   @@index([invoiceId])
   @@index([firmId, invoiceId, lineNo])
   @@map("invoice_lines")
+}
+
+model Ruleset {
+  id              String   @id @default(dbgenerated("(md5(random()::text || clock_timestamp()::text))::uuid")) @db.Uuid
+  firmId          String   @map("firm_id") @db.Uuid
+  firm            Firm     @relation(fields: [firmId], references: [id])
+  vendorId        String   @map("vendor_id") @db.Uuid
+  vendor          Vendor   @relation(fields: [vendorId], references: [id])
+  activeVersionId String?  @map("active_version_id") @db.Uuid
+  activeVersion   RuleVersion? @relation("ActiveRuleVersion", fields: [activeVersionId], references: [id])
+  createdBy       String?  @map("created_by") @db.Uuid
+  updatedBy       String?  @map("updated_by") @db.Uuid
+  createdByUser   User?    @relation("RulesetCreatedBy", fields: [createdBy], references: [id])
+  updatedByUser   User?    @relation("RulesetUpdatedBy", fields: [updatedBy], references: [id])
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @default(now()) @updatedAt @map("updated_at")
+  versions        RuleVersion[]
+
+  @@unique([firmId, vendorId])
+  @@index([firmId, vendorId])
+  @@map("rulesets")
+}
+
+model RuleVersion {
+  id            String   @id @default(dbgenerated("(md5(random()::text || clock_timestamp()::text))::uuid")) @db.Uuid
+  rulesetId     String   @map("ruleset_id") @db.Uuid
+  ruleset       Ruleset  @relation(fields: [rulesetId], references: [id])
+  version       Int
+  dslJson       Json     @map("dsl_json")
+  llmTraceId    String?  @map("llm_trace_id")
+  notes         String?
+  createdBy     String?  @map("created_by") @db.Uuid
+  createdByUser User?    @relation("RuleVersionCreatedBy", fields: [createdBy], references: [id])
+  createdAt     DateTime @default(now()) @map("created_at")
+  appliedLogs   RuleApplyLog[]
+  activeIn      Ruleset[] @relation("ActiveRuleVersion")
+
+  @@unique([rulesetId, version])
+  @@index([rulesetId, version(sort: Desc)])
+  @@map("rule_versions")
+}
+
+model RuleApplyLog {
+  id            String   @id @default(dbgenerated("(md5(random()::text || clock_timestamp()::text))::uuid")) @db.Uuid
+  firmId        String   @map("firm_id") @db.Uuid
+  firm          Firm     @relation(fields: [firmId], references: [id])
+  invoiceId     String   @map("invoice_id") @db.Uuid
+  invoice       Invoice  @relation(fields: [invoiceId], references: [id])
+  ruleVersionId String   @map("rule_version_id") @db.Uuid
+  ruleVersion   RuleVersion @relation(fields: [ruleVersionId], references: [id])
+  decisionsJson Json     @map("decisions_json")
+  appliedAt     DateTime @default(now()) @map("applied_at")
+  appliedBy     String?  @map("applied_by") @db.Uuid
+  appliedByUser User?    @relation("RuleApplyLogAppliedBy", fields: [appliedBy], references: [id])
+
+  @@index([invoiceId, appliedAt(sort: Desc)])
+  @@index([ruleVersionId, appliedAt(sort: Desc)])
+  @@index([firmId])
+  @@map("rule_apply_log")
+}
+
+model PurchaseOrder {
+  id             String   @id @default(dbgenerated("(md5(random()::text || clock_timestamp()::text))::uuid")) @db.Uuid
+  firmId         String   @map("firm_id") @db.Uuid
+  firm           Firm     @relation(fields: [firmId], references: [id])
+  vendorId       String?  @map("vendor_id") @db.Uuid
+  vendor         Vendor?  @relation(fields: [vendorId], references: [id])
+  poNumber       String   @map("po_number")
+  status         String   @default("open")
+  currencyCode   String?  @map("currency_code")
+  orderDate      DateTime? @map("order_date") @db.Date
+  expectedDate   DateTime? @map("expected_date") @db.Date
+  totalAmount    Decimal  @default(0) @map("total_amount") @db.Decimal(18, 2)
+  receivedAmount Decimal  @default(0) @map("received_amount") @db.Decimal(18, 2)
+  invoicedAmount Decimal  @default(0) @map("invoiced_amount") @db.Decimal(18, 2)
+  description    String?
+  notes          String?
+  createdBy      String?  @map("created_by") @db.Uuid
+  updatedBy      String?  @map("updated_by") @db.Uuid
+  createdByUser  User?    @relation("PurchaseOrderCreatedBy", fields: [createdBy], references: [id])
+  updatedByUser  User?    @relation("PurchaseOrderUpdatedBy", fields: [updatedBy], references: [id])
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @default(now()) @updatedAt @map("updated_at")
+  lines          PurchaseOrderLine[]
+  receipts       PurchaseOrderReceipt[]
+
+  @@unique([firmId, poNumber])
+  @@map("purchase_orders")
+}
+
+model PurchaseOrderLine {
+  id               String    @id @default(dbgenerated("(md5(random()::text || clock_timestamp()::text))::uuid")) @db.Uuid
+  firmId           String    @map("firm_id") @db.Uuid
+  firm             Firm      @relation(fields: [firmId], references: [id])
+  purchaseOrderId  String    @map("purchase_order_id") @db.Uuid
+  purchaseOrder    PurchaseOrder @relation(fields: [purchaseOrderId], references: [id])
+  lineNo           Int       @default(1) @map("line_no")
+  description      String?
+  quantity         Decimal   @default(1) @db.Decimal(18, 4)
+  unitCost         Decimal   @default(0) @map("unit_cost") @db.Decimal(18, 4)
+  lineAmount       Decimal   @default(0) @map("line_amount") @db.Decimal(18, 2)
+  receivedQuantity Decimal   @default(0) @map("received_quantity") @db.Decimal(18, 4)
+  invoicedQuantity Decimal   @default(0) @map("invoiced_quantity") @db.Decimal(18, 4)
+  glAccountNo      String?   @map("gl_account_no")
+  dimensionValues  Json      @default(dbgenerated("'{}'::jsonb")) @map("dimension_values")
+  active           Boolean   @default(true)
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @default(now()) @updatedAt @map("updated_at")
+  receipts         PurchaseOrderReceipt[]
+  invoiceLines     InvoiceLine[]
+
+  @@index([purchaseOrderId])
+  @@index([firmId, purchaseOrderId, lineNo])
+  @@map("purchase_order_lines")
+}
+
+model PurchaseOrderReceipt {
+  id                  String   @id @default(dbgenerated("(md5(random()::text || clock_timestamp()::text))::uuid")) @db.Uuid
+  firmId              String   @map("firm_id") @db.Uuid
+  firm                Firm     @relation(fields: [firmId], references: [id])
+  purchaseOrderId     String   @map("purchase_order_id") @db.Uuid
+  purchaseOrder       PurchaseOrder @relation(fields: [purchaseOrderId], references: [id])
+  purchaseOrderLineId String?  @map("purchase_order_line_id") @db.Uuid
+  purchaseOrderLine   PurchaseOrderLine? @relation(fields: [purchaseOrderLineId], references: [id])
+  receiptDate         DateTime @map("receipt_date") @db.Date
+  quantity            Decimal  @default(0) @db.Decimal(18, 4)
+  note                String?
+  createdAt           DateTime @default(now()) @map("created_at")
+
+  @@index([purchaseOrderId])
+  @@index([purchaseOrderLineId])
+  @@map("purchase_order_receipts")
 }
 
 model FirmMembership {
@@ -333,6 +554,73 @@ model InvoiceApproval {
   @@index([invoiceId])
   @@index([firmId, invoiceId])
   @@map("invoice_approvals")
+}
+
+model InvoiceApprovalPlan {
+  id              String   @id @default(dbgenerated("(md5(random()::text || clock_timestamp()::text))::uuid")) @db.Uuid
+  firmId          String   @map("firm_id") @db.Uuid
+  firm            Firm     @relation(fields: [firmId], references: [id])
+  invoiceId       String   @map("invoice_id") @db.Uuid
+  invoice         Invoice  @relation(fields: [invoiceId], references: [id])
+  requesterUserId String?  @map("requester_user_id") @db.Uuid
+  requesterUser   User?    @relation("InvoiceApprovalPlanRequester", fields: [requesterUserId], references: [id])
+  status          String   @default("active")
+  supersededAt    DateTime? @map("superseded_at")
+  completedAt     DateTime? @map("completed_at")
+  rejectedAt      DateTime? @map("rejected_at")
+  createdAt       DateTime @default(now()) @map("created_at")
+  scopes          InvoiceApprovalScope[]
+
+  @@index([firmId, invoiceId])
+  @@index([invoiceId])
+  @@map("invoice_approval_plans")
+}
+
+model InvoiceApprovalScope {
+  id           String   @id @default(dbgenerated("(md5(random()::text || clock_timestamp()::text))::uuid")) @db.Uuid
+  firmId       String   @map("firm_id") @db.Uuid
+  firm         Firm     @relation(fields: [firmId], references: [id])
+  invoiceId    String   @map("invoice_id") @db.Uuid
+  invoice      Invoice  @relation(fields: [invoiceId], references: [id])
+  planId       String   @map("plan_id") @db.Uuid
+  plan         InvoiceApprovalPlan @relation(fields: [planId], references: [id])
+  scopeType    String   @map("scope_type")
+  scopeKey     String?  @map("scope_key")
+  amount       Decimal  @db.Decimal(18, 2)
+  currencyCode String?  @map("currency_code")
+  status       String   @default("active")
+  completedAt  DateTime? @map("completed_at")
+  canceledAt   DateTime? @map("canceled_at")
+  createdAt    DateTime @default(now()) @map("created_at")
+  steps        InvoiceApprovalStep[]
+
+  @@index([planId])
+  @@index([firmId, invoiceId])
+  @@map("invoice_approval_scopes")
+}
+
+model InvoiceApprovalStep {
+  id            String   @id @default(dbgenerated("(md5(random()::text || clock_timestamp()::text))::uuid")) @db.Uuid
+  firmId        String   @map("firm_id") @db.Uuid
+  firm          Firm     @relation(fields: [firmId], references: [id])
+  invoiceId     String   @map("invoice_id") @db.Uuid
+  invoice       Invoice  @relation(fields: [invoiceId], references: [id])
+  scopeId       String   @map("scope_id") @db.Uuid
+  scope         InvoiceApprovalScope @relation(fields: [scopeId], references: [id])
+  stepIndex     Int      @map("step_index")
+  approverUserId String  @map("approver_user_id") @db.Uuid
+  approverUser  User     @relation("InvoiceApprovalStepApprover", fields: [approverUserId], references: [id])
+  status        String   @default("blocked")
+  comment       String?
+  actedByUserId String?  @map("acted_by_user_id") @db.Uuid
+  actedByUser   User?    @relation("InvoiceApprovalStepActedBy", fields: [actedByUserId], references: [id])
+  actedAt       DateTime? @map("acted_at")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@unique([scopeId, stepIndex])
+  @@index([scopeId, status])
+  @@index([firmId, invoiceId])
+  @@map("invoice_approval_steps")
 }
 
 model NavPostLog {

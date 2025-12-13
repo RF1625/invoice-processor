@@ -181,7 +181,7 @@ export function VendorManager({ vendors }: { vendors: VendorInput[] }) {
         </ul>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <form onSubmit={handleSubmit} className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
         <div className="flex items-center justify-between">
           <div>
             <div className="text-sm font-semibold text-slate-900">{editingId ? "Edit vendor" : "Add vendor"}</div>
@@ -296,7 +296,7 @@ export function InvoiceApprovalPanel({ invoices }: { invoices: InvoiceInput[] })
   };
 
   return (
-    <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+    <section className="rounded-xl border border-slate-200 bg-white p-4">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-lg font-semibold text-slate-900">Invoices & approvals</h2>
@@ -465,7 +465,7 @@ export function GlAccountManager({ glAccounts }: { glAccounts: GlAccountInput[] 
         </ul>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <form onSubmit={handleSubmit} className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
         <div className="flex items-center justify-between">
           <div>
             <div className="text-sm font-semibold text-slate-900">{editingId ? "Edit G/L account" : "Add G/L account"}</div>
@@ -602,7 +602,7 @@ export function DimensionManager({ dimensions }: { dimensions: DimensionInput[] 
         </ul>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <form onSubmit={handleSubmit} className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
         <div className="flex items-center justify-between">
           <div>
             <div className="text-sm font-semibold text-slate-900">{editingId ? "Edit dimension value" : "Add dimension value"}</div>
@@ -679,6 +679,22 @@ export function RuleManager({
   const [active, setActive] = useState<boolean>(true);
   const [comment, setComment] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
+  const [aiInstruction, setAiInstruction] = useState<string>("");
+  const [aiDraftRules, setAiDraftRules] = useState<
+    | Array<{
+        priority?: number | null;
+        matchType: MatchType;
+        matchValue?: string | null;
+        glAccountNo?: string | null;
+        dimensionOverrides?: Record<string, string> | null;
+        active?: boolean | null;
+        comment?: string | null;
+      }>
+    | null
+  >(null);
+  const [aiNotes, setAiNotes] = useState<string[]>([]);
+  const [aiWarnings, setAiWarnings] = useState<string[]>([]);
+  const [aiBusy, setAiBusy] = useState<boolean>(false);
 
   const resetForm = () => {
     setEditingId(null);
@@ -691,6 +707,64 @@ export function RuleManager({
     setActive(true);
     setComment("");
     setError(null);
+  };
+
+  const resetAi = () => {
+    setAiInstruction("");
+    setAiDraftRules(null);
+    setAiNotes([]);
+    setAiWarnings([]);
+    setAiBusy(false);
+  };
+
+  const generateAiRules = async () => {
+    const instruction = aiInstruction.trim();
+    if (!vendorId) return;
+    if (instruction.length < 5) {
+      setAiWarnings(["Please add a little more detail (at least 5 characters)."]);
+      return;
+    }
+
+    setAiBusy(true);
+    setAiWarnings([]);
+    setAiNotes([]);
+    try {
+      const res = await fetch("/api/vendor-rules/ai", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ vendorId, instruction }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json.details ?? json.error ?? "Failed to generate rules");
+      setAiDraftRules(Array.isArray(json.rules) ? json.rules : []);
+      setAiNotes(Array.isArray(json.notes) ? json.notes : []);
+      setAiWarnings(Array.isArray(json.warnings) ? json.warnings : []);
+    } catch (err) {
+      setAiWarnings([err instanceof Error ? err.message : "Failed to generate rules"]);
+    } finally {
+      setAiBusy(false);
+    }
+  };
+
+  const saveAiRules = async () => {
+    if (!vendorId || !aiDraftRules?.length) return;
+    setAiBusy(true);
+    setAiWarnings([]);
+    try {
+      const res = await fetch("/api/vendor-rules/ai", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ vendorId, draftRules: aiDraftRules, create: true }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json.details ?? json.error ?? "Failed to save rules");
+      resetAi();
+      router.refresh();
+    } catch (err) {
+      setAiWarnings([err instanceof Error ? err.message : "Failed to save rules"]);
+    } finally {
+      setAiBusy(false);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -791,7 +865,103 @@ export function RuleManager({
         </ul>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="space-y-4">
+        <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-sm font-semibold text-slate-900">AI rule builder</div>
+              <p className="text-xs text-slate-600">Write instructions in plain English, preview, then save.</p>
+            </div>
+            {aiDraftRules?.length ? (
+              <button type="button" className="text-xs text-slate-600 underline underline-offset-4" onClick={resetAi}>
+                Clear
+              </button>
+            ) : null}
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-xs font-semibold text-slate-600">Vendor</label>
+            <Select value={vendorId} onValueChange={setVendorId} disabled={vendors.length === 0 || aiBusy}>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder={vendors.length === 0 ? "No vendors available" : "Choose vendor"} />
+              </SelectTrigger>
+              <SelectContent>
+                {vendors.map((v) => (
+                  <SelectItem key={v.id} value={v.id}>
+                    {v.vendorNo} — {v.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-xs font-semibold text-slate-600">Instructions</label>
+            <textarea
+              value={aiInstruction}
+              onChange={(e) => setAiInstruction(e.target.value)}
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              rows={4}
+              placeholder={`Example: "If description contains 'freight' or 'shipping', use GL 6210. Otherwise use GL 6000 and set DEPARTMENT=OPS."`}
+              disabled={aiBusy}
+            />
+          </div>
+
+          {aiWarnings.length ? (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              {aiWarnings.map((w, i) => (
+                <div key={i}>{w}</div>
+              ))}
+            </div>
+          ) : null}
+          {aiNotes.length ? (
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
+              {aiNotes.map((n, i) => (
+                <div key={i}>{n}</div>
+              ))}
+            </div>
+          ) : null}
+
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={generateAiRules}
+              disabled={aiBusy || vendors.length === 0}
+              className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
+            >
+              {aiBusy ? "Working…" : "Generate rules"}
+            </button>
+            <button
+              type="button"
+              onClick={saveAiRules}
+              disabled={aiBusy || !aiDraftRules?.length}
+              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50 disabled:opacity-50"
+            >
+              Save rules
+            </button>
+          </div>
+
+          {aiDraftRules?.length ? (
+            <div className="space-y-2 pt-2">
+              <div className="text-xs font-semibold uppercase text-slate-600">Preview</div>
+              <ul className="space-y-2">
+                {aiDraftRules.map((r, idx) => (
+                  <li key={idx} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs">
+                    <div className="font-mono text-slate-800">
+                      {r.matchType} • {r.matchValue ?? "—"} • prio {r.priority ?? 100}
+                    </div>
+                    <div className="text-slate-700">
+                      GL: {r.glAccountNo ?? "—"} • Dims: {formatDims(r.dimensionOverrides ?? null)}
+                    </div>
+                    {r.comment ? <div className="text-slate-500">Note: {r.comment}</div> : null}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+        </div>
+
+      <form onSubmit={handleSubmit} className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
         <div className="flex items-center justify-between">
           <div>
             <div className="text-sm font-semibold text-slate-900">{editingId ? "Edit rule" : "Add rule"}</div>
@@ -839,6 +1009,10 @@ export function RuleManager({
                 <SelectItem value="description_contains">Description contains</SelectItem>
                 <SelectItem value="description_regex">Description regex</SelectItem>
                 <SelectItem value="amount_equals">Amount equals</SelectItem>
+                <SelectItem value="amount_lt">Amount less than</SelectItem>
+                <SelectItem value="amount_lte">Amount ≤</SelectItem>
+                <SelectItem value="amount_gt">Amount greater than</SelectItem>
+                <SelectItem value="amount_gte">Amount ≥</SelectItem>
                 <SelectItem value="always">Always</SelectItem>
               </SelectContent>
             </Select>
@@ -899,6 +1073,7 @@ export function RuleManager({
           {editingId ? "Update rule" : "Add rule"}
         </button>
       </form>
+      </div>
     </div>
   );
 }

@@ -24,6 +24,14 @@ export async function POST(_req: NextRequest, context: { params: Promise<{ id: s
       return NextResponse.json({ error: "Run not found" }, { status: 404 });
     }
 
+    const invoiceForRun = await prisma.invoice.findFirst({
+      where: { firmId, runId: run.id },
+      select: { id: true, status: true },
+    });
+    if (invoiceForRun && invoiceForRun.status !== "approved") {
+      return NextResponse.json({ error: "Invoice is not approved yet" }, { status: 400 });
+    }
+
     if (!run.navPayload) {
       return NextResponse.json({ error: "No NAV payload stored for this run" }, { status: 400 });
     }
@@ -45,7 +53,7 @@ export async function POST(_req: NextRequest, context: { params: Promise<{ id: s
       data: {
         firmId,
         runId: run.id,
-        invoiceId: null,
+        invoiceId: invoiceForRun?.id ?? null,
         status: "success",
         message: navResponse?.message ?? "NAV post succeeded",
         response: navResponseForLog,
@@ -74,12 +82,16 @@ export async function POST(_req: NextRequest, context: { params: Promise<{ id: s
         (await requireFirmId().catch(() => null)) ??
         (await prisma.run.findUnique({ where: { id: runId }, select: { firmId: true } }).then((r) => r?.firmId).catch(() => null));
       if (firmIdForLog) {
+        const invoiceIdForLog = await prisma.invoice
+          .findFirst({ where: { firmId: firmIdForLog, runId }, select: { id: true } })
+          .then((i) => i?.id ?? null)
+          .catch(() => null);
         await prisma.navPostLog
           .create({
             data: {
               firmId: firmIdForLog,
               runId,
-              invoiceId: null,
+              invoiceId: invoiceIdForLog,
               status: "error",
               message,
             },

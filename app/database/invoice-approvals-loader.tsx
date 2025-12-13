@@ -62,7 +62,7 @@ export function InvoiceApprovalsLoader() {
 
   if (loading) {
     return (
-      <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <section className="rounded-xl border border-slate-200 bg-white p-4">
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-lg font-semibold text-slate-900">Invoices & approvals</h2>
@@ -76,7 +76,7 @@ export function InvoiceApprovalsLoader() {
 
   if (error) {
     return (
-      <section className="rounded-xl border border-amber-200 bg-amber-50 p-4 shadow-sm text-sm text-amber-900">
+      <section className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-lg font-semibold text-slate-900">Invoices & approvals</h2>
@@ -88,7 +88,7 @@ export function InvoiceApprovalsLoader() {
               setInvoices([]);
               void fetchInvoices();
             }}
-            className="rounded-md border border-slate-300 px-3 py-1 text-xs font-semibold text-slate-800 shadow-sm hover:bg-white"
+            className="rounded-md border border-slate-300 px-3 py-1 text-xs font-semibold text-slate-800 hover:bg-white"
           >
             Retry
           </button>

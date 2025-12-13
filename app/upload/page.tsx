@@ -65,7 +65,7 @@ export default function UploadPage() {
   };
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-200 p-8 text-slate-900">
+    <main className="min-h-screen bg-white p-8 text-slate-900">
       <div className="mx-auto flex max-w-4xl flex-col gap-8">
         <header className="space-y-2">
           <p className="text-xs uppercase tracking-[0.25em] text-slate-500">Manual upload</p>
@@ -75,7 +75,7 @@ export default function UploadPage() {
           </p>
         </header>
 
-        <section className="rounded-2xl bg-white p-6 shadow-md ring-1 ring-slate-100">
+        <section className="rounded-2xl bg-white p-6 ring-1 ring-slate-100">
           <form onSubmit={handleSubmit} className="space-y-4">
             <label className="flex cursor-pointer flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed border-slate-200 bg-slate-50 px-6 py-10 text-center transition hover:border-slate-300 hover:bg-slate-100">
               <UploadCloud className="h-10 w-10 text-slate-500" />
@@ -96,7 +96,7 @@ export default function UploadPage() {
               <button
                 type="submit"
                 disabled={loading}
-                className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-md transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
+                className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
               >
                 {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
                 {loading ? "Analyzing…" : "Analyze invoice"}
@@ -174,7 +174,7 @@ export default function UploadPage() {
 
 function Field({ label, value }: { label: string; value?: string | number | null }) {
   return (
-    <div className="rounded-lg bg-white px-3 py-2 shadow-sm ring-1 ring-slate-200">
+    <div className="rounded-lg bg-white px-3 py-2 ring-1 ring-slate-200">
       <p className="text-xs uppercase tracking-wide text-slate-500">{label}</p>
       <p className="mt-1 text-sm font-semibold text-slate-900">{value ?? "—"}</p>
     </div>

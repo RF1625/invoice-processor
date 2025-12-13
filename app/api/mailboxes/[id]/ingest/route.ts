@@ -21,7 +21,21 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
       return NextResponse.json({ error: "Mailbox not found" }, { status: 404 });
     }
 
-    const result = await ingestMailbox(mailbox);
+    let body: any = null;
+    try {
+      body = await _req.json();
+    } catch {
+      body = null;
+    }
+    const url = _req.nextUrl;
+    const sinceDaysParam = url.searchParams.get("sinceDays");
+    const maxMessagesParam = url.searchParams.get("maxMessages");
+    const sinceDaysRaw = body?.sinceDays ?? (sinceDaysParam ? Number(sinceDaysParam) : undefined);
+    const maxMessagesRaw = body?.maxMessages ?? body?.maxMessagesOverride ?? (maxMessagesParam ? Number(maxMessagesParam) : undefined);
+    const sinceDays = Number.isFinite(sinceDaysRaw) ? Number(sinceDaysRaw) : undefined;
+    const maxMessagesOverride = Number.isFinite(maxMessagesRaw) ? Number(maxMessagesRaw) : undefined;
+
+    const result = await ingestMailbox(mailbox, { sinceDays, maxMessagesOverride });
     return NextResponse.json(result, { status: 200 });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Mailbox ingest failed";

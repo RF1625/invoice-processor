@@ -1,6 +1,8 @@
 import { Prisma, type MatchType, type VendorRule } from "@prisma/client";
 import { prisma } from "./prisma";
 import { type NavPurchaseInvoicePayload } from "./navClient";
+import { suggestVendorMatches } from "./vendorMatching";
+import { applyDslDeterministically, type CanonicalInvoice } from "./rulesDsl";
 
 export class ValidationError extends Error {
   statusCode = 400;
@@ -55,7 +57,7 @@ const parseTokens = (raw: string | null | undefined) =>
     .map((t) => t.trim())
     .filter(Boolean);
 
-const matchesRule = (rule: VendorRule, description: string, amount: number | null | undefined) => {
+export const matchesVendorRule = (rule: VendorRule, description: string, amount: number | null | undefined) => {
   if (!rule.active) return false;
   const normalized = description.toLowerCase();
 
@@ -80,6 +82,30 @@ const matchesRule = (rule: VendorRule, description: string, amount: number | nul
       if (Number.isNaN(target)) return false;
       return Math.abs(amount - target) < 0.0001;
     }
+    case "amount_lt": {
+      if (amount == null) return false;
+      const target = rule.matchValue ? Number(rule.matchValue) : NaN;
+      if (Number.isNaN(target)) return false;
+      return amount < target;
+    }
+    case "amount_lte": {
+      if (amount == null) return false;
+      const target = rule.matchValue ? Number(rule.matchValue) : NaN;
+      if (Number.isNaN(target)) return false;
+      return amount <= target;
+    }
+    case "amount_gt": {
+      if (amount == null) return false;
+      const target = rule.matchValue ? Number(rule.matchValue) : NaN;
+      if (Number.isNaN(target)) return false;
+      return amount > target;
+    }
+    case "amount_gte": {
+      if (amount == null) return false;
+      const target = rule.matchValue ? Number(rule.matchValue) : NaN;
+      if (Number.isNaN(target)) return false;
+      return amount >= target;
+    }
     case "always":
       return true;
     default:
@@ -88,9 +114,7 @@ const matchesRule = (rule: VendorRule, description: string, amount: number | nul
 };
 
 const validateNavPayload = (payload: NavPurchaseInvoicePayload | null) => {
-  if (!payload) {
-    throw new ValidationError("Vendor not resolved for invoice");
-  }
+  if (!payload) return null;
   const errors: string[] = [];
   if (!payload.vendorNo) errors.push("vendorNo is required");
   if (!payload.lines.length) errors.push("at least one invoice line is required");
@@ -126,6 +150,7 @@ export async function applyVendorRulesAndLog(params: {
   navVendorNo?: string | null;
   fileName?: string | null;
   firmId: string;
+  azureRawJson?: Prisma.InputJsonValue | null;
   fileMeta?: {
     fileName: string;
     storagePath?: string;
@@ -138,8 +163,9 @@ export async function applyVendorRulesAndLog(params: {
   navPayload: NavPurchaseInvoicePayload | null;
   ruleApplications: RuleApplication[];
   runId: string;
+  invoiceId: string;
 }> {
-  const { invoice, navVendorNo, fileName, firmId, fileMeta } = params;
+  const { invoice, navVendorNo, fileName, firmId, fileMeta, azureRawJson } = params;
 
   const vendor =
     navVendorNo != null
@@ -147,22 +173,37 @@ export async function applyVendorRulesAndLog(params: {
           where: { firmId_vendorNo: { firmId, vendorNo: navVendorNo } },
           include: { rules: { where: { active: true }, orderBy: { priority: "asc" } } },
         })
-      : invoice.vendorName
-        ? await prisma.vendor.findFirst({
-            where: { firmId, name: { equals: invoice.vendorName, mode: "insensitive" } },
-            include: { rules: { where: { active: true }, orderBy: { priority: "asc" } } },
-          })
-        : null;
+      : null;
 
-  const resolvedVendorNo = vendor?.vendorNo ?? navVendorNo ?? null;
-  const defaultDims = (vendor?.defaultDimensions as Record<string, string> | null) ?? {};
-  const rules = vendor?.rules ?? [];
+  const vendorText = invoice.vendorName ?? "";
+  const vendorMatch = vendorText
+    ? await suggestVendorMatches({ firmId, vendorText, take: 5 })
+    : { candidates: [], normalized: "" };
+
+  // Only auto-match on deterministic, normalized exact match (score=1.0).
+  const autoMatchedVendorId =
+    !vendor && vendorMatch.candidates.length && vendorMatch.candidates[0].score >= 1
+      ? vendorMatch.candidates[0].vendorId
+      : null;
+  const vendorByAlias =
+    !vendor && autoMatchedVendorId
+      ? await prisma.vendor.findFirst({
+          where: { id: autoMatchedVendorId, firmId },
+          include: { rules: { where: { active: true }, orderBy: { priority: "asc" } } },
+        })
+      : null;
+
+  const resolvedVendor = vendor ?? vendorByAlias;
+
+  const resolvedVendorNo = resolvedVendor?.vendorNo ?? navVendorNo ?? null;
+  const defaultDims = (resolvedVendor?.defaultDimensions as Record<string, string> | null) ?? {};
+  const rules = resolvedVendor?.rules ?? [];
 
   const ruleApplications: RuleApplication[] = [];
-  const itemsWithAssignments = invoice.items.map((item, idx) => {
+  let itemsWithAssignments = invoice.items.map((item, idx) => {
     const description = item.description ?? "";
     const amount = item.amount ?? item.unitPrice ?? null;
-    const rule = rules.find((r) => matchesRule(r, description, amount));
+    const rule = rules.find((r) => matchesVendorRule(r, description, amount));
     const mergedDims = {
       ...defaultDims,
       ...(rule?.dimensionOverrides as Record<string, string> | null | undefined),
@@ -187,6 +228,63 @@ export async function applyVendorRulesAndLog(params: {
       dimensions: Object.keys(mergedDims).length ? mergedDims : undefined,
     };
   });
+
+  // Prefer versioned rulesets (DSL) over legacy vendor_rules when present.
+  const activeRuleset =
+    resolvedVendor?.id != null
+      ? await prisma.ruleset.findFirst({
+          where: { firmId, vendorId: resolvedVendor.id },
+          include: { activeVersion: true },
+        })
+      : null;
+
+  const appliedDslResult =
+    activeRuleset?.activeVersion && resolvedVendor
+      ? (() => {
+          const canonical: CanonicalInvoice = {
+            invoice_id: invoice.invoiceId ?? "unknown",
+            vendor_id: resolvedVendor.id,
+            status: "draft",
+            currency: invoice.currencyCode ?? null,
+            invoice_date: invoice.invoiceDate ?? null,
+            total:
+              invoice.invoiceTotal ??
+              invoice.amountDue ??
+              itemsWithAssignments.reduce((sum, item) => sum + (item.amount ?? 0), 0),
+            lines: itemsWithAssignments.map((l, idx) => ({
+              line_index: idx,
+              description: l.description ?? null,
+              qty: l.quantity ?? null,
+              unit_price: l.unitPrice ?? null,
+              amount: l.amount ?? null,
+            })),
+          };
+          return applyDslDeterministically({
+            invoice: canonical,
+            dsl: activeRuleset.activeVersion.dslJson as any,
+            ruleVersionId: activeRuleset.activeVersion.id,
+            vendorMatchStatus: resolvedVendor ? "matched" : vendorText ? "suggested" : "unmatched",
+            vendorMatchConfidence: resolvedVendor ? 1 : null,
+          });
+        })()
+      : null;
+
+  if (appliedDslResult) {
+    // Override line assignments based on DSL engine output (still deterministic).
+    itemsWithAssignments = itemsWithAssignments.map((item, idx) => {
+      const update = appliedDslResult.proposed.lineUpdates.find((u) => u.line_index === idx);
+      const mergedDims = {
+        ...defaultDims,
+        ...(update?.set_dimensions ?? {}),
+        ...(item.dimensions ?? {}),
+      };
+      return {
+        ...item,
+        glAccountNo: update?.set_gl ?? item.glAccountNo ?? null,
+        dimensions: Object.keys(mergedDims).length ? mergedDims : undefined,
+      };
+    });
+  }
 
   const navPayload: NavPurchaseInvoicePayload | null = resolvedVendorNo
     ? {
@@ -224,12 +322,19 @@ export async function applyVendorRulesAndLog(params: {
     const run = await tx.run.create({
       data: {
         firmId,
-        vendorId: vendor?.id ?? null,
+        vendorId: resolvedVendor?.id ?? null,
         vendorNo: resolvedVendorNo,
         fileName: fileName ?? null,
-        status: "processed",
+        status: resolvedVendor ? "processed" : "needs_review",
         error: null,
-        invoicePayload: invoicePayloadJson,
+        invoicePayload: {
+          ...(invoice as any),
+          vendorMatch: {
+            status: resolvedVendor ? "matched" : vendorText ? "suggested" : "unmatched",
+            normalized: vendorMatch.normalized,
+            candidates: vendorMatch.candidates,
+          },
+        } as Prisma.InputJsonValue,
         ruleApplications: ruleApplicationsJson,
         navPayload: navPayloadJson,
       },
@@ -239,18 +344,42 @@ export async function applyVendorRulesAndLog(params: {
     const invoiceRecord = await tx.invoice.create({
       data: {
         firmId,
-        vendorId: vendor?.id ?? null,
+        vendorId: resolvedVendor?.id ?? null,
         runId: run.id,
         vendorNo: resolvedVendorNo,
         invoiceNo: invoice.invoiceId ?? null,
         invoiceDate: invoice.invoiceDate ? new Date(invoice.invoiceDate) : null,
         dueDate: invoice.dueDate ? new Date(invoice.dueDate) : null,
         currencyCode: validatedPayload?.currencyCode ?? invoice.currencyCode ?? null,
-        status: "draft",
+        status:
+          !resolvedVendor
+            ? "needs_review"
+            : appliedDslResult &&
+                (!appliedDslResult.eligibility.vendorMatched ||
+                  appliedDslResult.eligibility.requiredFieldsMissing.length ||
+                  appliedDslResult.eligibility.conflicts.length)
+              ? "needs_review"
+              : "draft",
         totalAmount: new Prisma.Decimal(totalAmount ?? 0),
         taxAmount: new Prisma.Decimal(taxAmount ?? 0),
         netAmount: new Prisma.Decimal(netAmount),
         originalPayload: invoicePayloadJson,
+        canonicalJson: {
+          ...(invoice as any),
+          vendorMatch: {
+            status: resolvedVendor ? "matched" : vendorText ? "suggested" : "unmatched",
+            normalized: vendorMatch.normalized,
+            candidates: vendorMatch.candidates,
+          },
+        } as Prisma.InputJsonValue,
+        azureRawJson: azureRawJson ?? undefined,
+        vendorMatchStatus: resolvedVendor ? "matched" : vendorText ? "suggested" : "unmatched",
+        vendorMatchConfidence: resolvedVendor
+          ? new Prisma.Decimal(1)
+          : vendorMatch.candidates.length
+            ? new Prisma.Decimal(vendorMatch.candidates[0].score)
+            : null,
+        recommendedApprovalPolicy: appliedDslResult?.proposed.approvalPolicy ?? undefined,
         lines: {
           create: itemsWithAssignments.map((line, idx) => ({
             firmId,
@@ -261,6 +390,14 @@ export async function applyVendorRulesAndLog(params: {
             lineAmount: new Prisma.Decimal(line.amount ?? 0),
             glAccountNo: line.glAccountNo ?? undefined,
             dimensionValues: line.dimensions ?? {},
+            canonicalJson: {
+              description: line.description ?? null,
+              quantity: line.quantity ?? null,
+              unitPrice: line.unitPrice ?? null,
+              amount: line.amount ?? null,
+              glAccountNo: line.glAccountNo ?? null,
+              dimensions: line.dimensions ?? null,
+            } as Prisma.InputJsonValue,
             taxRate: invoice.taxRate != null ? new Prisma.Decimal(invoice.taxRate) : null,
             taxCode: null,
             active: true,
@@ -269,6 +406,31 @@ export async function applyVendorRulesAndLog(params: {
       },
       select: { id: true },
     });
+
+    if (appliedDslResult && activeRuleset?.activeVersion) {
+      await tx.ruleApplyLog.create({
+        data: {
+          firmId,
+          invoiceId: invoiceRecord.id,
+          ruleVersionId: activeRuleset.activeVersion.id,
+          decisionsJson: {
+            invoice_id: invoiceRecord.id,
+            vendor_id: resolvedVendor?.id ?? null,
+            ruleset_id: activeRuleset.id,
+            rule_version_id: activeRuleset.activeVersion.id,
+            applied: true,
+            needs_review:
+              !appliedDslResult.eligibility.vendorMatched ||
+              appliedDslResult.eligibility.requiredFieldsMissing.length > 0 ||
+              appliedDslResult.eligibility.conflicts.length > 0,
+            eligibility: appliedDslResult.eligibility,
+            decisions: appliedDslResult.decisions,
+            proposed: appliedDslResult.proposed,
+          } as Prisma.InputJsonValue,
+          appliedBy: null,
+        },
+      });
+    }
 
     if (fileMeta) {
       await tx.file.create({
@@ -293,5 +455,6 @@ export async function applyVendorRulesAndLog(params: {
     navPayload: validatedPayload,
     ruleApplications,
     runId,
+    invoiceId,
   };
 }

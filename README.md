@@ -55,6 +55,7 @@ Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/bui
 - Error handling: surface NAV errors back to the UI; consider a staging + job queue pattern to decouple posting from the extractor call.
 - Development: set `NAV_USE_MOCK=true` to use the mock NAV layer (`lib/navClient.ts`, `lib/navMock.ts`, `lib/vendorTemplates.ts`) so the UI/API can build NAV journal previews without a live NAV connection.
 - Posting: set `NAV_BASE_URL`, `NAV_COMPANY`, `NAV_USER`, `NAV_PASSWORD`, and optional `NAV_PURCHASE_INVOICE_PATH` (defaults to `PurchaseInvoices`). Then trigger a post with `POST /api/invoice-runs/:id/post-to-nav` or the "Send to NAV" buttons in the UI; when `NAV_USE_MOCK=true`, the payload is only logged.
+- Purchase Orders: optional `NAV_PURCHASE_ORDER_PATH` (defaults to `PurchaseOrders`) is used by `lib/navClient.postPurchaseOrder`. PO CRUD/receipts UI lives under `/purchase-orders`; APIs include `/api/purchase-orders` (list/create), `/api/purchase-orders/:id` (read/update/cancel), `/api/purchase-orders/:id/lines`, `/api/purchase-orders/:id/receipts`, `/api/purchase-orders/open-lines` (available lines for matching), and `/api/invoices/:id/match-po` to tie invoice lines to PO lines and update quantities.
 
 ## Database (PostgreSQL) for NAV master data and rules
 
@@ -64,6 +65,32 @@ Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/bui
 - Connection helper: `lib/db.ts` exposes a pooled client via `getPool`/`withClient`.
 - NAV sync endpoint: POST `/api/nav-sync` to upsert vendors/G/L/dimensions from the NAV client (or mock data when `NAV_USE_MOCK=true`).
 - Runs table stores each deterministic rule application: raw invoice JSON, rule matches per line, and the NAV payload used for previewing.
+- Supabase note: for migrations/DDL, prefer the direct DB host (`db.<project>.supabase.co:5432`) over the pooler (`*.pooler.supabase.com:6543`) if you hit disconnects.
+
+## AI vendor rule builder (optional)
+
+You can generate vendor rules from natural language (then review + save) by setting:
+
+- `OPENAI_API_KEY` (required)
+- `OPENAI_MODEL_VENDOR_RULES` (optional, default `gpt-4o-mini`)
+
+Core APIs (LLM used only at compile-time):
+
+- `POST /api/rules/compile` with `{ vendorId, instructionText }` → `{ dsl, warnings, requiredMappings, llmTraceId }`
+- `POST /api/rulesets/:vendorId/versions` with `{ dsl, activate, notes, llmTraceId }` → saves an immutable rule version (optionally activates it)
+- `POST /api/invoices/:invoiceId/apply-rules` → runs deterministic engine, writes `rule_apply_log`, updates invoice lines
+- `POST /api/invoices/:invoiceId/submit-for-approval` → snapshots an approval plan (or auto-approves if policy is `none`)
+- `POST /api/invoices/:invoiceId/confirm-vendor` with `{ vendorId }` → confirms the vendor match (moves invoice out of `needs_review`)
+- `GET/POST /api/vendor-aliases`, `PUT/DELETE /api/vendor-aliases/:id` → manage vendor aliases (used only for vendor-match suggestions)
+
+APIs:
+
+- `POST /api/vendor-rules/ai` with `{ vendorId, instruction }` → returns draft rules (no DB write)
+- `POST /api/vendor-rules/ai` with `{ vendorId, draftRules, create: true }` → persists the draft rules
+
+The `/database` UI includes an "AI rule builder" panel under Vendor rules.
+
+Note: `/api/vendor-rules/*` and the "Vendor rules" UI are the legacy matcher-based rules. The versioned DSL rulesets live under `/api/rules*` and are the recommended path for deterministic, auditable automation.
 
 ## Prisma
 

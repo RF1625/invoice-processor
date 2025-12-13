@@ -157,12 +157,19 @@ export async function analyzeInvoiceBuffer(
   }
 
   const invoice = buildInvoiceSummary(doc);
-  const { invoice: processedInvoice, navPayload, ruleApplications, runId } = await applyVendorRulesAndLog({
+  const azureRawJson = {
+    modelId: result.modelId,
+    documents: result.documents ?? [],
+    pages: result.pages ?? [],
+    content: result.content ?? null,
+  };
+  const { invoice: processedInvoice, navPayload, ruleApplications, runId, invoiceId } = await applyVendorRulesAndLog({
     invoice,
     navVendorNo: invoice.navVendorNo ?? null,
     fileName: opts?.fileName ?? null,
     firmId: opts.firmId,
     fileMeta: opts.fileMeta,
+    azureRawJson: azureRawJson as any,
   });
 
   return {
@@ -170,6 +177,7 @@ export async function analyzeInvoiceBuffer(
     navPayload,
     ruleApplications,
     runId,
+    invoiceId,
     modelId: result.modelId,
     pagesAnalyzed: result.pages?.length ?? 0,
   };

@@ -54,7 +54,7 @@ export default function DashboardPage() {
   }, [runs]);
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-200 p-8 text-slate-900">
+    <main className="min-h-screen bg-white p-8 text-slate-900">
       <div className="mx-auto flex max-w-6xl flex-col gap-8">
         <header className="flex flex-wrap items-center justify-between gap-4">
           <div>
@@ -67,14 +67,14 @@ export default function DashboardPage() {
           <div className="flex flex-wrap items-center gap-3">
             <Link
               href="/settings/inbox"
-              className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-md transition hover:bg-slate-800"
+              className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
             >
               <Mail className="h-4 w-4" />
               Connect email
             </Link>
             <Link
               href="/upload"
-              className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800 shadow-sm transition hover:bg-slate-50"
+              className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800 transition hover:bg-slate-50"
             >
               <Upload className="h-4 w-4" />
               Manual upload
@@ -109,7 +109,7 @@ export default function DashboardPage() {
           />
         </section>
 
-        <section className="rounded-2xl bg-white p-6 shadow-md ring-1 ring-slate-100">
+        <section className="rounded-2xl bg-white p-6 ring-1 ring-slate-100">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h2 className="text-lg font-semibold text-slate-900">Recent activity</h2>
@@ -119,7 +119,7 @@ export default function DashboardPage() {
               type="button"
               onClick={loadRuns}
               disabled={loading}
-              className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-800 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-100"
+              className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-800 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-100"
             >
               <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
               Refresh
@@ -192,7 +192,7 @@ function StatCard({
   accent: string;
 }) {
   return (
-    <div className="rounded-2xl bg-white p-5 shadow-md ring-1 ring-slate-100">
+    <div className="rounded-2xl bg-white p-5 ring-1 ring-slate-100">
       <p className="text-sm text-slate-600">{title}</p>
       <div className="mt-2 flex items-baseline gap-2">
         <span className="text-3xl font-semibold text-slate-900">{value}</span>

@@ -206,7 +206,7 @@ export async function testMailboxConnection(mailbox: MailboxRecord) {
   try {
     const mailboxName = mailbox.sourceMailbox || "INBOX";
     await client.connect();
-    await client.mailboxOpen(mailboxName);
+    const box = await client.mailboxOpen(mailboxName);
 
     const previews: Array<{
       uid: number;
@@ -232,7 +232,12 @@ export async function testMailboxConnection(mailbox: MailboxRecord) {
     }
 
     await client.logout();
-    return { ok: true, mailboxId: mailbox.id, previews };
+    return {
+      ok: true,
+      mailboxId: mailbox.id,
+      previews,
+      latestUid: typeof box.uidNext === "number" ? Math.max(box.uidNext - 1, 0) : null,
+    };
   } catch (err) {
     try {
       await client.logout();
@@ -244,14 +249,79 @@ export async function testMailboxConnection(mailbox: MailboxRecord) {
   }
 }
 
-export async function ingestMailbox(mailbox: MailboxRecord) {
+export async function summarizeMailbox(
+  mailbox: MailboxRecord,
+  opts: { sinceDays?: number; previewLimit?: number } = {},
+) {
+  const client = await buildImapClient(mailbox);
+  const sinceDays = opts.sinceDays ?? 30;
+  const previewLimit = opts.previewLimit ?? 3;
+  const sinceDate = new Date(Date.now() - sinceDays * 24 * 60 * 60 * 1000);
+  try {
+    const mailboxName = mailbox.sourceMailbox || "INBOX";
+    await client.connect();
+    const box = await client.mailboxOpen(mailboxName);
+    const latestUid = typeof box.uidNext === "number" ? Math.max(box.uidNext - 1, 0) : null;
+
+    let potentialCount = 0;
+    let scanned = 0;
+    const previews: Array<{ uid: number; subject: string; from: string[]; hasPdf: boolean }> = [];
+
+    for await (const message of client.fetch({ seen: false, since: sinceDate }, { envelope: true, bodyStructure: true })) {
+      scanned += 1;
+      if (shouldProcessMessage(parseList(mailbox.allowedSenders), parseList(mailbox.subjectKeywords, DEFAULT_SUBJECT_KEYWORDS), message)) {
+        potentialCount += 1;
+        if (previews.length < previewLimit) {
+          previews.push({
+            uid: Number(message.uid),
+            subject: message.envelope?.subject ?? "",
+            from: normalizeAddresses(message.envelope),
+            hasPdf: collectPdfAttachments(message.bodyStructure).length > 0,
+          });
+        }
+      }
+      if (scanned >= 200) break; // lightweight guardrail
+    }
+
+    await client.logout();
+    return {
+      ok: true,
+      mailboxId: mailbox.id,
+      potentialCount,
+      sinceDays,
+      latestUid,
+      previews,
+      scanned,
+    };
+  } catch (err) {
+    try {
+      await client.logout();
+    } catch (logoutErr) {
+      console.warn("Failed to logout after summary", logoutErr);
+    }
+    const message = err instanceof Error ? err.message : "Mailbox summary failed";
+    return { ok: false, mailboxId: mailbox.id, error: message };
+  }
+}
+
+export type IngestOptions = {
+  sinceDays?: number;
+  maxMessagesOverride?: number;
+};
+
+export async function ingestMailbox(mailbox: MailboxRecord, options: IngestOptions = {}) {
   const client = await buildImapClient(mailbox);
   const allowedSenders = parseList(mailbox.allowedSenders);
   const subjectKeywords = parseList(mailbox.subjectKeywords, DEFAULT_SUBJECT_KEYWORDS);
   const sourceMailbox = mailbox.sourceMailbox || "INBOX";
   const processedMailbox = mailbox.processedMailbox || undefined;
-  const maxMessages = mailbox.maxMessages && Number.isFinite(mailbox.maxMessages) ? mailbox.maxMessages : DEFAULT_MAX_MESSAGES;
-  const startUid = mailbox.lastSeenUid ? Number(mailbox.lastSeenUid) + 1 : null;
+  const maxMessages =
+    options.maxMessagesOverride && Number.isFinite(options.maxMessagesOverride)
+      ? options.maxMessagesOverride
+      : mailbox.maxMessages && Number.isFinite(mailbox.maxMessages)
+        ? mailbox.maxMessages
+        : DEFAULT_MAX_MESSAGES;
+  const startUid = options.sinceDays ? null : mailbox.lastSeenUid ? Number(mailbox.lastSeenUid) + 1 : null;
   const processed: Array<{ uid: number; subject: string; fileName: string; invoiceId: string | null }> = [];
   const skipped: Array<{ uid: number; subject: string; reason: string }> = [];
   let handled = 0;
@@ -262,7 +332,11 @@ export async function ingestMailbox(mailbox: MailboxRecord) {
     await client.mailboxOpen(sourceMailbox);
 
     const search: Record<string, unknown> = { seen: false };
-    if (startUid) search.uid = `${startUid}:*`;
+    if (options.sinceDays && Number.isFinite(options.sinceDays)) {
+      search.since = new Date(Date.now() - (options.sinceDays as number) * 24 * 60 * 60 * 1000);
+    } else if (startUid) {
+      search.uid = `${startUid}:*`;
+    }
 
     for await (const message of client.fetch(search, { envelope: true, bodyStructure: true })) {
       if (handled >= maxMessages) break;
