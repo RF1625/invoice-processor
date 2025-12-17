@@ -38,7 +38,7 @@ export function buildSessionCookie(token: string, expiresAt: Date) {
   };
 }
 
-export async function getSessionFromCookies() {
+export async function getSessionTokenFromCookies() {
   const cookieStore = await cookies();
   const headerStore = await headers();
   const token =
@@ -46,6 +46,11 @@ export async function getSessionFromCookies() {
       ? (cookieStore as unknown as { get: (name: string) => { value?: string } | undefined }).get(SESSION_COOKIE_NAME)
           ?.value
       : parseCookieHeader(headerStore.get("cookie") ?? "")[SESSION_COOKIE_NAME];
+  return token ?? null;
+}
+
+export async function getSessionFromCookies() {
+  const token = await getSessionTokenFromCookies();
   if (!token) return null;
 
   const session = await prisma.session.findFirst({

@@ -1,7 +1,7 @@
-import { getSessionFromCookies } from "@/lib/auth";
+import { getSessionTokenFromCookies } from "@/lib/auth";
 import { SiteNavClient } from "./site-nav-client";
 
 export async function SiteNav() {
-  const session = await getSessionFromCookies();
-  return <SiteNavClient isAuthenticated={Boolean(session)} />;
+  const token = await getSessionTokenFromCookies();
+  return <SiteNavClient isAuthenticated={Boolean(token)} />;
 }
