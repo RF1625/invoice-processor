@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
     const checksum = crypto.createHash("sha256").update(bytes).digest("hex");
     const storagePath = `local-upload/${firmId}/${Date.now()}-${fileName ?? "upload"}`;
 
-    const { processedInvoice, navPayload, ruleApplications, runId, invoiceId, modelId, pagesAnalyzed } =
+    const { processedInvoice, navPayload, ruleApplications, runId, invoiceId, modelId, pagesAnalyzed, navValidationError } =
       await analyzeInvoiceBuffer(bytes, {
         fileName,
         firmId,
@@ -67,13 +67,19 @@ export async function POST(req: NextRequest) {
         runId,
         invoiceId,
         navUseMock: process.env.NAV_USE_MOCK === "true",
+        navValidationError,
       },
       { status: 200 },
     );
   } catch (err) {
     console.error("Invoice analysis failed", err);
     const message = err instanceof Error ? err.message : "Failed to analyze invoice";
-    const status = err instanceof ValidationError || (err as { statusCode?: number })?.statusCode === 400 ? 400 : 500;
+    const status =
+      message.includes("Unauthorized")
+        ? 401
+        : err instanceof ValidationError || (err as { statusCode?: number })?.statusCode === 400
+          ? 400
+          : 500;
     return NextResponse.json({ error: "Failed to analyze invoice", details: message }, { status });
   }
 }

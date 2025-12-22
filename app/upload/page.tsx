@@ -19,6 +19,7 @@ type ApiResult = {
   runId?: string;
   pagesAnalyzed?: number;
   modelId?: string;
+  navValidationError?: string | null;
 };
 
 export default function UploadPage() {
@@ -129,6 +130,12 @@ export default function UploadPage() {
                 Processed successfully
                 {result.pagesAnalyzed ? <span className="text-emerald-700">({result.pagesAnalyzed} page(s))</span> : null}
               </div>
+              {result.navValidationError ? (
+                <div className="inline-flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                  <AlertCircle className="h-4 w-4" />
+                  {result.navValidationError}
+                </div>
+              ) : null}
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-800">
                 <div className="grid gap-2 sm:grid-cols-2">
                   <Field label="Vendor" value={result.invoice?.vendorName} />

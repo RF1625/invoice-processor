@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { AlertTriangle, CheckCircle2, Mail, RefreshCw, Upload } from "lucide-react";
+import { readCache, writeCache } from "@/lib/client-cache";
 
 type Run = {
   id: string;
@@ -14,6 +15,9 @@ type Run = {
   error?: string | null;
 };
 
+const CACHE_KEY = "dashboard-runs-v1";
+const CACHE_TTL_MS = 30_000;
+
 const statusLabel = (status: string) => {
   if (!status) return "unknown";
   if (status.toLowerCase().includes("error") || status.toLowerCase().includes("fail")) return "error";
@@ -23,27 +27,47 @@ const statusLabel = (status: string) => {
 
 export default function DashboardPage() {
   const [runs, setRuns] = useState<Run[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [isReady, setIsReady] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isRefreshing, startRefresh] = useTransition();
+  const shouldRefresh = useMemo(
+    () => lastUpdated == null || Date.now() - lastUpdated > CACHE_TTL_MS,
+    [lastUpdated],
+  );
 
-  const loadRuns = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await fetch("/api/invoice-runs", { cache: "no-store" });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? "Failed to load activity");
-      setRuns(json.runs ?? []);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load activity");
-    } finally {
-      setLoading(false);
-    }
-  };
+  const loadRuns = useCallback(() => {
+    startRefresh(async () => {
+      try {
+        setError(null);
+        const res = await fetch("/api/invoice-runs", { cache: "no-store" });
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.error ?? "Failed to load activity");
+        const entry = writeCache<Run[]>(CACHE_KEY, json.runs ?? []);
+        setRuns(entry.data);
+        setIsReady(true);
+        setLastUpdated(entry.updatedAt);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to load activity");
+        setIsReady(true);
+      }
+    });
+  }, [startRefresh]);
 
   useEffect(() => {
-    loadRuns().catch(() => {});
+    const cachedEntry = readCache<Run[]>(CACHE_KEY);
+    if (cachedEntry) {
+      setRuns(cachedEntry.data);
+      setLastUpdated(cachedEntry.updatedAt);
+    }
+    setIsReady(true);
   }, []);
+
+  useEffect(() => {
+    if (!isReady) return;
+    if (!shouldRefresh) return;
+    loadRuns();
+  }, [isReady, shouldRefresh, loadRuns]);
 
   const stats = useMemo(() => {
     const processed = runs.filter((r) => statusLabel(r.status) === "processed").length;
@@ -52,6 +76,7 @@ export default function DashboardPage() {
     const lastRun = runs[0]?.createdAt ? new Date(runs[0].createdAt) : null;
     return { processed, errors, total, lastRun };
   }, [runs]);
+  const contentReady = isReady || runs.length > 0;
 
   return (
     <main className="min-h-screen bg-white p-8 text-slate-900">
@@ -118,10 +143,10 @@ export default function DashboardPage() {
             <button
               type="button"
               onClick={loadRuns}
-              disabled={loading}
+              disabled={isRefreshing}
               className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-800 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-100"
             >
-              <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+              <RefreshCw className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
               Refresh
             </button>
           </div>
@@ -141,13 +166,13 @@ export default function DashboardPage() {
               <span>Notes</span>
             </div>
             <div className="divide-y divide-slate-100">
-              {loading && (
+              {!contentReady && (
                 <div className="px-3 py-4 text-sm text-slate-600">Loading recent runs...</div>
               )}
-              {!loading && runs.length === 0 && (
+              {contentReady && runs.length === 0 && !isRefreshing && (
                 <div className="px-3 py-4 text-sm text-slate-600">No runs yet. Connect email to start ingesting.</div>
               )}
-              {!loading &&
+              {runs.length > 0 &&
                 runs.map((run) => (
                   <div key={run.id} className="grid grid-cols-6 items-center px-3 py-3 text-sm">
                     <div className="col-span-2 truncate font-medium text-slate-900">

@@ -57,6 +57,56 @@ const parseTokens = (raw: string | null | undefined) =>
     .map((t) => t.trim())
     .filter(Boolean);
 
+const normalizeVendorName = (raw: string) =>
+  raw
+    .trim()
+    .replace(/\s+/g, " ")
+    .replace(/[“”]/g, '"')
+    .replace(/[‘’]/g, "'")
+    .trim();
+
+const isLikelyJunkVendorName = (name: string) => {
+  const normalized = normalizeVendorName(name).toLowerCase();
+  if (normalized.length < 3) return true;
+  if (/^\d+$/.test(normalized)) return true;
+
+  // Looser normalization to catch punctuation-only variants like "Tax Invoice:" or "Tax-Invoice".
+  const loose = normalized
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+
+  const junk = new Set([
+    "invoice",
+    "tax invoice",
+    "gst invoice",
+    "vat invoice",
+    "statement",
+    "receipt",
+    "bill",
+  ]);
+
+  if (junk.has(loose)) return true;
+  if (/^(invoice|statement|receipt|bill)(\s+\d+)?$/.test(loose)) return true;
+  if (/^(tax|gst|vat)\s*invoice(\s+\d+)?$/.test(loose)) return true;
+
+  return false;
+};
+
+const shouldAutoCreateVendorFromInvoice = (params: {
+  vendorText: string;
+  invoiceConfidence: number | null | undefined;
+  topCandidateScore: number | null;
+}) => {
+  const vendorText = normalizeVendorName(params.vendorText);
+  if (!vendorText) return false;
+  if (isLikelyJunkVendorName(vendorText)) return false;
+  if (params.invoiceConfidence == null || params.invoiceConfidence < 0.9) return false;
+  // Only auto-create when we don't have a plausible existing match.
+  if (params.topCandidateScore != null && params.topCandidateScore >= 0.6) return false;
+  return true;
+};
+
 export const matchesVendorRule = (rule: VendorRule, description: string, amount: number | null | undefined) => {
   if (!rule.active) return false;
   const normalized = description.toLowerCase();
@@ -164,6 +214,7 @@ export async function applyVendorRulesAndLog(params: {
   ruleApplications: RuleApplication[];
   runId: string;
   invoiceId: string;
+  navValidationError: string | null;
 }> {
   const { invoice, navVendorNo, fileName, firmId, fileMeta, azureRawJson } = params;
 
@@ -175,10 +226,20 @@ export async function applyVendorRulesAndLog(params: {
         })
       : null;
 
-  const vendorText = invoice.vendorName ?? "";
+  const vendorText = normalizeVendorName(invoice.vendorName ?? "");
   const vendorMatch = vendorText
     ? await suggestVendorMatches({ firmId, vendorText, take: 5 })
-    : { candidates: [], normalized: "" };
+    : { candidates: [], normalized: "", hasExactMatch: false };
+  const topCandidateScore =
+    vendorMatch.candidates.length > 0 ? vendorMatch.candidates[0].score : null;
+  const wantsAutoCreateVendor =
+    !vendor &&
+    !vendorMatch.hasExactMatch &&
+    shouldAutoCreateVendorFromInvoice({
+      vendorText,
+      invoiceConfidence: invoice.confidence ?? null,
+      topCandidateScore,
+    });
 
   // Only auto-match on deterministic, normalized exact match (score=1.0).
   const autoMatchedVendorId =
@@ -193,7 +254,60 @@ export async function applyVendorRulesAndLog(params: {
         })
       : null;
 
-  const resolvedVendor = vendor ?? vendorByAlias;
+  // If no match, optionally auto-create a vendor record (kept in needs_review until confirmed).
+  let resolvedVendor = vendor ?? vendorByAlias;
+  type ResolvedVendor = typeof resolvedVendor;
+  let autoCreatedVendor = false;
+  if (!resolvedVendor && wantsAutoCreateVendor) {
+    let created: ResolvedVendor = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        created = await prisma.$transaction(async (tx) => {
+          const lastAuto = await tx.vendor.findFirst({
+            where: { firmId, vendorNo: { startsWith: "AUTO-" } },
+            orderBy: { vendorNo: "desc" },
+            select: { vendorNo: true },
+          });
+
+          const lastNum = lastAuto?.vendorNo
+            ? Number(lastAuto.vendorNo.replace(/^AUTO-/, ""))
+            : 0;
+          const nextNum = Number.isFinite(lastNum) ? lastNum + 1 : 1;
+          const vendorNo = `AUTO-${String(nextNum).padStart(6, "0")}`;
+
+          const newVendor = await tx.vendor.create({
+            data: {
+              firmId,
+              vendorNo,
+              name: vendorText,
+              gstNumber: invoice.gstNumber ?? null,
+              defaultCurrency: invoice.currencyCode ?? null,
+              active: true,
+            },
+            include: { rules: { where: { active: true }, orderBy: { priority: "asc" } } },
+          });
+
+          await tx.vendorAlias.create({
+            data: {
+              firmId,
+              vendorId: newVendor.id,
+              aliasText: vendorText,
+              confidenceHint: new Prisma.Decimal(1),
+            },
+          });
+
+          return newVendor;
+        });
+        break;
+      } catch (err) {
+        const code = (err as any)?.code;
+        if (code === "P2002" && attempt < 2) continue; // unique constraint collision; retry
+        throw err;
+      }
+    }
+    resolvedVendor = created;
+    autoCreatedVendor = true;
+  }
 
   const resolvedVendorNo = resolvedVendor?.vendorNo ?? navVendorNo ?? null;
   const defaultDims = (resolvedVendor?.defaultDimensions as Record<string, string> | null) ?? {};
@@ -263,8 +377,9 @@ export async function applyVendorRulesAndLog(params: {
             invoice: canonical,
             dsl: activeRuleset.activeVersion.dslJson as any,
             ruleVersionId: activeRuleset.activeVersion.id,
-            vendorMatchStatus: resolvedVendor ? "matched" : vendorText ? "suggested" : "unmatched",
-            vendorMatchConfidence: resolvedVendor ? 1 : null,
+            vendorMatchStatus:
+              resolvedVendor && !autoCreatedVendor ? "matched" : vendorText ? "suggested" : "unmatched",
+            vendorMatchConfidence: resolvedVendor && !autoCreatedVendor ? 1 : null,
           });
         })()
       : null;
@@ -286,7 +401,8 @@ export async function applyVendorRulesAndLog(params: {
     });
   }
 
-  const navPayload: NavPurchaseInvoicePayload | null = resolvedVendorNo
+  // For auto-created vendors we intentionally do not build a NAV payload yet; coding happens after review/confirmation.
+  const navPayload: NavPurchaseInvoicePayload | null = resolvedVendorNo && !autoCreatedVendor
     ? {
         vendorNo: resolvedVendorNo,
         vendorInvoiceNo: invoice.invoiceId ?? undefined,
@@ -305,11 +421,18 @@ export async function applyVendorRulesAndLog(params: {
       }
     : null;
 
-  const validatedPayload = validateNavPayload(navPayload);
+  let validatedPayload: NavPurchaseInvoicePayload | null = null;
+  let navValidationError: string | null = null;
+  try {
+    validatedPayload = validateNavPayload(navPayload);
+  } catch (err) {
+    navValidationError = err instanceof Error ? err.message : "Invoice validation failed";
+  }
+  const hasNavValidationError = Boolean(navValidationError);
   const invoicePayloadJson: Prisma.InputJsonValue = invoice as Prisma.InputJsonValue;
   const ruleApplicationsJson: Prisma.InputJsonValue = ruleApplications as Prisma.InputJsonValue;
-  const navPayloadJson: Prisma.InputJsonValue | undefined = validatedPayload
-    ? (validatedPayload as Prisma.InputJsonValue)
+  const navPayloadJson: Prisma.InputJsonValue | undefined = navPayload
+    ? (navPayload as Prisma.InputJsonValue)
     : undefined;
 
   const totalAmount =
@@ -325,14 +448,16 @@ export async function applyVendorRulesAndLog(params: {
         vendorId: resolvedVendor?.id ?? null,
         vendorNo: resolvedVendorNo,
         fileName: fileName ?? null,
-        status: resolvedVendor ? "processed" : "needs_review",
-        error: null,
+        status: resolvedVendor && !autoCreatedVendor && !hasNavValidationError ? "processed" : "needs_review",
+        error: navValidationError,
         invoicePayload: {
           ...(invoice as any),
           vendorMatch: {
-            status: resolvedVendor ? "matched" : vendorText ? "suggested" : "unmatched",
+            status:
+              resolvedVendor && !autoCreatedVendor ? "matched" : vendorText ? "suggested" : "unmatched",
             normalized: vendorMatch.normalized,
             candidates: vendorMatch.candidates,
+            autoCreatedVendor: autoCreatedVendor || undefined,
           },
         } as Prisma.InputJsonValue,
         ruleApplications: ruleApplicationsJson,
@@ -352,7 +477,7 @@ export async function applyVendorRulesAndLog(params: {
         dueDate: invoice.dueDate ? new Date(invoice.dueDate) : null,
         currencyCode: validatedPayload?.currencyCode ?? invoice.currencyCode ?? null,
         status:
-          !resolvedVendor
+          !resolvedVendor || autoCreatedVendor || hasNavValidationError
             ? "needs_review"
             : appliedDslResult &&
                 (!appliedDslResult.eligibility.vendorMatched ||
@@ -367,14 +492,17 @@ export async function applyVendorRulesAndLog(params: {
         canonicalJson: {
           ...(invoice as any),
           vendorMatch: {
-            status: resolvedVendor ? "matched" : vendorText ? "suggested" : "unmatched",
+            status:
+              resolvedVendor && !autoCreatedVendor ? "matched" : vendorText ? "suggested" : "unmatched",
             normalized: vendorMatch.normalized,
             candidates: vendorMatch.candidates,
+            autoCreatedVendor: autoCreatedVendor || undefined,
           },
         } as Prisma.InputJsonValue,
         azureRawJson: azureRawJson ?? undefined,
-        vendorMatchStatus: resolvedVendor ? "matched" : vendorText ? "suggested" : "unmatched",
-        vendorMatchConfidence: resolvedVendor
+        vendorMatchStatus:
+          resolvedVendor && !autoCreatedVendor ? "matched" : vendorText ? "suggested" : "unmatched",
+        vendorMatchConfidence: resolvedVendor && !autoCreatedVendor
           ? new Prisma.Decimal(1)
           : vendorMatch.candidates.length
             ? new Prisma.Decimal(vendorMatch.candidates[0].score)
@@ -452,9 +580,15 @@ export async function applyVendorRulesAndLog(params: {
 
   return {
     invoice: { ...invoice, navVendorNo: resolvedVendorNo, items: itemsWithAssignments },
-    navPayload: validatedPayload,
+    navPayload: navPayload,
     ruleApplications,
     runId,
     invoiceId,
+    navValidationError,
   };
 }
+
+export const __test__ = {
+  isLikelyJunkVendorName,
+  shouldAutoCreateVendorFromInvoice,
+};

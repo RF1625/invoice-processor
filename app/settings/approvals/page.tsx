@@ -1,52 +1,18 @@
 "use client";
 
-import { useCallback, useEffect, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ApprovalsClient, type ApprovalUserRow } from "./ui";
+import { ApprovalsClient } from "./ui";
+import { normalizeApprovalUsers, type ApprovalSettingsCache, type ApprovalUserRow } from "@/lib/approvals-cache";
+import { readCache, writeCache } from "@/lib/client-cache";
 
-const STORAGE_KEY = "approvals-cache-v1";
-let memoryCache: ApprovalUserRow[] | null = null;
+const CACHE_KEY = "approvals-cache-v1";
+const CACHE_TTL_MS = 60_000;
 
-type ApiApprovalSetup = {
-  approverUserId?: string | null;
-  approvalLimit?: unknown;
-  substituteUserId?: string | null;
-  substituteFrom?: string | Date | null;
-  substituteTo?: string | Date | null;
-  active?: boolean | null;
+const coerceCache = (value: ApprovalSettingsCache | ApprovalUserRow[]): ApprovalSettingsCache => {
+  if (Array.isArray(value)) return { users: value, forbidden: false };
+  return { users: value.users ?? [], forbidden: Boolean(value.forbidden) };
 };
-
-type ApiApprovalUser = {
-  userId: string;
-  role: string;
-  email: string;
-  name?: string | null;
-  setup?: ApiApprovalSetup | null;
-};
-
-const normalizeDate = (raw: unknown) => {
-  if (!raw) return null;
-  const d = new Date(raw as string);
-  return Number.isFinite(d.getTime()) ? d.toISOString() : null;
-};
-
-const normalizeUsers = (raw: ApiApprovalUser[]): ApprovalUserRow[] =>
-  raw.map((u) => ({
-    userId: u.userId,
-    role: u.role,
-    email: u.email,
-    name: u.name ?? null,
-    setup: u.setup
-      ? {
-          approverUserId: u.setup.approverUserId ?? null,
-          approvalLimit: u.setup.approvalLimit == null ? null : u.setup.approvalLimit.toString?.() ?? String(u.setup.approvalLimit),
-          substituteUserId: u.setup.substituteUserId ?? null,
-          substituteFrom: normalizeDate(u.setup.substituteFrom),
-          substituteTo: normalizeDate(u.setup.substituteTo),
-          active: u.setup.active ?? true,
-        }
-      : null,
-  }));
 
 const Forbidden = () => (
   <main className="min-h-screen bg-white p-8 text-slate-900">
@@ -59,11 +25,16 @@ const Forbidden = () => (
 
 export default function ApprovalSettingsPage() {
   const router = useRouter();
-  const [users, setUsers] = useState<ApprovalUserRow[]>(memoryCache ?? []);
+  const [users, setUsers] = useState<ApprovalUserRow[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isForbidden, setIsForbidden] = useState(false);
-  const [isReady, setIsReady] = useState(Boolean(memoryCache));
+  const [isReady, setIsReady] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<number | null>(null);
   const [isRefreshing, startRefresh] = useTransition();
+  const shouldRefresh = useMemo(
+    () => lastUpdated == null || Date.now() - lastUpdated > CACHE_TTL_MS,
+    [lastUpdated],
+  );
 
   const refreshData = useCallback(() => {
     startRefresh(async () => {
@@ -76,17 +47,20 @@ export default function ApprovalSettingsPage() {
           return;
         }
         if (res.status === 403) {
+          const entry = writeCache<ApprovalSettingsCache>(CACHE_KEY, { users: [], forbidden: true });
           setIsForbidden(true);
           setIsReady(true);
+          setLastUpdated(entry.updatedAt);
           return;
         }
         if (!res.ok) throw new Error(json.error ?? "Failed to load approval setups");
 
-        const normalized = normalizeUsers(json.users ?? []);
-        memoryCache = normalized;
-        sessionStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
-        setUsers(normalized);
+        const normalized = normalizeApprovalUsers(json.users ?? []);
+        const entry = writeCache<ApprovalSettingsCache>(CACHE_KEY, { users: normalized, forbidden: false });
+        setUsers(entry.data.users);
+        setIsForbidden(false);
         setIsReady(true);
+        setLastUpdated(entry.updatedAt);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load approval setups");
         setIsReady(true);
@@ -95,29 +69,28 @@ export default function ApprovalSettingsPage() {
   }, [router, startRefresh]);
 
   useEffect(() => {
-    if (memoryCache) return;
-    const stored = sessionStorage.getItem(STORAGE_KEY);
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored) as ApprovalUserRow[];
-        memoryCache = parsed;
-        setUsers(parsed);
-        setIsReady(true);
-      } catch {
-        sessionStorage.removeItem(STORAGE_KEY);
-      }
+    const cachedEntry = readCache<ApprovalSettingsCache | ApprovalUserRow[]>(CACHE_KEY);
+    if (cachedEntry) {
+      const cached = coerceCache(cachedEntry.data);
+      setUsers(cached.users);
+      setIsForbidden(cached.forbidden);
+      setLastUpdated(cachedEntry.updatedAt);
     }
+    setIsReady(true);
   }, []);
 
   useEffect(() => {
-    if (isReady || isForbidden) return;
+    if (!isReady) return;
+    if (isForbidden) return;
+    if (isReady && !shouldRefresh) return;
     void refreshData();
-  }, [isReady, isForbidden, refreshData]);
+  }, [isReady, isForbidden, shouldRefresh, refreshData]);
 
   const handleUsersChange = (nextUsers: ApprovalUserRow[]) => {
-    memoryCache = nextUsers;
-    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(nextUsers));
-    setUsers(nextUsers);
+    const entry = writeCache<ApprovalSettingsCache>(CACHE_KEY, { users: nextUsers, forbidden: false });
+    setUsers(entry.data.users);
+    setIsForbidden(false);
+    setLastUpdated(entry.updatedAt);
   };
 
   const contentReady = isReady || users.length > 0;

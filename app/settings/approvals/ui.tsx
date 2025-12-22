@@ -5,21 +5,7 @@ import { useRouter } from "next/navigation";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DatePicker } from "@/components/ui/date-picker";
-
-export type ApprovalUserRow = {
-  userId: string;
-  role: string;
-  email: string;
-  name: string | null;
-  setup: {
-    approverUserId: string | null;
-    approvalLimit: string | null;
-    substituteUserId: string | null;
-    substituteFrom: string | null;
-    substituteTo: string | null;
-    active: boolean;
-  } | null;
-};
+import type { ApprovalUserRow } from "@/lib/approvals-cache";
 
 type DraftSetup = NonNullable<ApprovalUserRow["setup"]>;
 

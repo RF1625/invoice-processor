@@ -19,10 +19,10 @@ export async function suggestVendorMatches(params: {
   firmId: string;
   vendorText: string;
   take?: number;
-}): Promise<{ candidates: VendorMatchCandidate[]; normalized: string }> {
+}): Promise<{ candidates: VendorMatchCandidate[]; normalized: string; hasExactMatch: boolean }> {
   const take = Math.max(1, Math.min(params.take ?? 5, 20));
   const normalized = normalizeVendorText(params.vendorText);
-  if (!normalized) return { candidates: [], normalized };
+  if (!normalized) return { candidates: [], normalized, hasExactMatch: false };
 
   const [vendors, aliases] = await Promise.all([
     prisma.vendor.findMany({
@@ -41,6 +41,7 @@ export async function suggestVendorMatches(params: {
   ]);
 
   const scored: VendorMatchCandidate[] = [];
+  let hasExactMatch = false;
 
   for (const v of vendors) {
     const n = normalizeVendorText(v.name);
@@ -50,6 +51,7 @@ export async function suggestVendorMatches(params: {
     else if (n.startsWith(normalized) || normalized.startsWith(n)) score = 0.9;
     else if (n.includes(normalized) || normalized.includes(n)) score = 0.8;
     if (score > 0) {
+      if (score >= 1) hasExactMatch = true;
       scored.push({ vendorId: v.id, vendorNo: v.vendorNo, name: v.name, matchedOn: "vendor_name", score });
     }
   }
@@ -62,6 +64,7 @@ export async function suggestVendorMatches(params: {
     else if (n.startsWith(normalized) || normalized.startsWith(n)) score = 0.9;
     else if (n.includes(normalized) || normalized.includes(n)) score = 0.8;
     if (score > 0) {
+      if (score >= 1) hasExactMatch = true;
       const hint = Number(a.confidenceHint ?? 1);
       scored.push({
         vendorId: a.vendorId,
@@ -81,6 +84,7 @@ export async function suggestVendorMatches(params: {
 
   return {
     normalized,
+    hasExactMatch,
     candidates: [...dedup.values()].sort((a, b) => b.score - a.score).slice(0, take),
   };
 }

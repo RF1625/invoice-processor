@@ -3,43 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import type { DimensionInput, GlAccountInput, InvoiceInput, RuleInput, VendorInput } from "@/lib/database-cache";
 import type { MatchType } from "@prisma/client";
-
-type VendorInput = {
-  id: string;
-  vendorNo: string;
-  name: string;
-  gstNumber?: string | null;
-  defaultCurrency?: string | null;
-  defaultDimensions?: Record<string, string> | null;
-  active: boolean;
-};
-
-type RuleInput = {
-  id: string;
-  vendorId: string;
-  priority: number;
-  matchType: MatchType;
-  matchValue?: string | null;
-  glAccountNo?: string | null;
-  dimensionOverrides?: Record<string, string> | null;
-  active: boolean;
-  comment?: string | null;
-  vendorName?: string | null;
-};
-
-type GlAccountInput = { id: string; no: string; name: string; type?: string | null };
-type DimensionInput = { id: string; code: string; valueCode: string; valueName: string; active: boolean };
-type InvoiceApprovalInput = { id: string; status: string; comment?: string | null; actedAt?: string | null; createdAt: string };
-type InvoiceInput = {
-  id: string;
-  invoiceNo?: string | null;
-  vendorName?: string | null;
-  status: string;
-  currencyCode?: string | null;
-  totalAmount: number;
-  approvals: InvoiceApprovalInput[];
-};
 
 const formatDims = (value: Record<string, string> | null | undefined) =>
   value && Object.keys(value).length > 0 ? JSON.stringify(value) : "—";

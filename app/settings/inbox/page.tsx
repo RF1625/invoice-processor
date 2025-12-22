@@ -1,11 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { readCache, writeCache } from "@/lib/client-cache";
 
 const DEFAULT_MAX_MESSAGES = 10;
 const DEFAULT_SUBJECT_KEYWORDS = ["invoice", "bill", "payment", "statement"];
+const CACHE_KEY = "inbox-mailboxes-v1";
+const CACHE_TTL_MS = 60_000;
 
 type MailboxRow = {
   id: string;
@@ -48,6 +51,8 @@ export default function ConnectInboxPage() {
 function InboxContent() {
   const searchParams = useSearchParams();
   const [mailboxes, setMailboxes] = useState<MailboxRow[]>([]);
+  const [isReady, setIsReady] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -59,6 +64,10 @@ function InboxContent() {
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [summaryError, setSummaryError] = useState<string | null>(null);
   const [summaryAction, setSummaryAction] = useState<string | null>(null);
+  const shouldRefresh = useMemo(
+    () => lastUpdated == null || Date.now() - lastUpdated > CACHE_TTL_MS,
+    [lastUpdated],
+  );
 
   const [form, setForm] = useState({
     host: "",
@@ -95,20 +104,33 @@ function InboxContent() {
     }
   }, [mailboxes, searchParams]);
 
-  const loadMailboxes = async () => {
+  useEffect(() => {
+    const cachedEntry = readCache<MailboxRow[]>(CACHE_KEY);
+    if (cachedEntry) {
+      setMailboxes(cachedEntry.data);
+      setLastUpdated(cachedEntry.updatedAt);
+    }
+    setIsReady(true);
+  }, []);
+
+  const loadMailboxes = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const res = await fetch("/api/mailboxes", { cache: "no-store" });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Failed to load mailboxes");
-      setMailboxes(json.mailboxes ?? []);
+      const entry = writeCache<MailboxRow[]>(CACHE_KEY, json.mailboxes ?? []);
+      setMailboxes(entry.data);
+      setIsReady(true);
+      setLastUpdated(entry.updatedAt);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load mailboxes");
+      setIsReady(true);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   const pickNewestMailbox = (list: MailboxRow[]) => {
     if (!list.length) return null;
@@ -143,8 +165,10 @@ function InboxContent() {
   };
 
   useEffect(() => {
+    if (!isReady) return;
+    if (!shouldRefresh) return;
     loadMailboxes().catch(() => {});
-  }, []);
+  }, [isReady, shouldRefresh, loadMailboxes]);
 
   const handleOAuth = (provider: "google" | "outlook") => {
     setMessage(null);
@@ -470,7 +494,7 @@ function InboxContent() {
           </div>
 
           <div className="mt-4 space-y-3">
-            {loading && <p className="text-sm text-slate-600">Loading mailboxes...</p>}
+            {loading && !isReady && <p className="text-sm text-slate-600">Loading mailboxes...</p>}
             {!loading && sortedMailboxes.length === 0 && (
               <p className="text-sm text-slate-600">No inboxes connected yet.</p>
             )}

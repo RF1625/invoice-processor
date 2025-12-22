@@ -1,106 +1,28 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { VendorManager, RuleManager, GlAccountManager, DimensionManager, InvoiceApprovalPanel } from "./forms";
-import type { MatchType } from "@prisma/client";
+import { emptyDatabaseSnapshot, normalizeDatabaseSnapshot, type DatabaseSnapshot } from "@/lib/database-cache";
+import { readCache, writeCache } from "@/lib/client-cache";
 
-type VendorInput = {
-  id: string;
-  vendorNo: string;
-  name: string;
-  gstNumber?: string | null;
-  defaultCurrency?: string | null;
-  defaultDimensions?: Record<string, string> | null;
-  active: boolean;
-};
-
-type GlAccountInput = { id: string; no: string; name: string; type?: string | null };
-type DimensionInput = { id: string; code: string; valueCode: string; valueName: string; active: boolean };
-type RuleInput = {
-  id: string;
-  vendorId: string;
-  priority: number;
-  matchType: MatchType;
-  matchValue?: string | null;
-  glAccountNo?: string | null;
-  dimensionOverrides?: Record<string, string> | null;
-  active: boolean;
-  comment?: string | null;
-  vendorName?: string | null;
-};
-type RunInput = {
-  id: string;
-  status: string;
-  vendorName?: string | null;
-  vendorNo?: string | null;
-  fileName?: string | null;
-  createdAt?: string | null;
-  error?: string | null;
-};
-type InvoiceApprovalInput = { id: string; status: string; comment?: string | null; actedAt?: string | null; createdAt: string };
-type InvoiceInput = {
-  id: string;
-  invoiceNo?: string | null;
-  vendorName?: string | null;
-  status: string;
-  currencyCode?: string | null;
-  totalAmount: number;
-  approvals: InvoiceApprovalInput[];
-};
-
-type DatabaseSnapshot = {
-  vendors: VendorInput[];
-  glAccounts: GlAccountInput[];
-  dimensions: DimensionInput[];
-  rules: RuleInput[];
-  runs: RunInput[];
-  invoices: InvoiceInput[];
-};
-
-const STORAGE_KEY = "db-cache-v1";
-let memoryCache: DatabaseSnapshot | null = null;
-
-const emptySnapshot: DatabaseSnapshot = {
-  vendors: [],
-  glAccounts: [],
-  dimensions: [],
-  rules: [],
-  runs: [],
-  invoices: [],
-};
+const CACHE_KEY = "db-cache-v1";
+const CACHE_TTL_MS = 120_000;
 
 export default function DatabasePage() {
   const router = useRouter();
-  const [data, setData] = useState<DatabaseSnapshot>(memoryCache ?? emptySnapshot);
-  const [isReady, setIsReady] = useState(Boolean(memoryCache));
+  const [data, setData] = useState<DatabaseSnapshot>(emptyDatabaseSnapshot);
+  const [isReady, setIsReady] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<number | null>(null);
   const [isRefreshing, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const shouldRefresh = useMemo(
+    () => lastUpdated == null || Date.now() - lastUpdated > CACHE_TTL_MS,
+    [lastUpdated],
+  );
 
-  // Load from sessionStorage for instant re-entry across navigations or reloads.
-  useEffect(() => {
-    if (memoryCache) return;
-    const stored = sessionStorage.getItem(STORAGE_KEY);
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored) as DatabaseSnapshot;
-        memoryCache = parsed;
-        setData(parsed);
-        setIsReady(true);
-      } catch {
-        sessionStorage.removeItem(STORAGE_KEY);
-      }
-    }
-  }, []);
-
-  // Initial fetch if no cache yet.
-  useEffect(() => {
-    if (isReady) return;
-    void refreshData();
-  }, [isReady]);
-
-  const refreshData = async () => {
+  const refreshData = useCallback(() => {
     startTransition(async () => {
       try {
         setError(null);
@@ -134,78 +56,42 @@ export default function DatabasePage() {
         if (!runRes.ok) throw new Error(runJson.error ?? "Failed to load runs");
         if (!invoiceRes.ok) throw new Error(invoiceJson.error ?? "Failed to load invoices");
 
-        const next: DatabaseSnapshot = {
-          vendors: (vendorsJson.vendors ?? []).map((v: any) => ({
-            id: v.id,
-            vendorNo: v.vendorNo,
-            name: v.name,
-            gstNumber: v.gstNumber,
-            defaultCurrency: v.defaultCurrency,
-            defaultDimensions: v.defaultDimensions ?? null,
-            active: v.active,
-          })),
-          glAccounts: (glJson.glAccounts ?? []).map((g: any) => ({
-            id: g.id,
-            no: g.no,
-            name: g.name,
-            type: g.type,
-          })),
-          dimensions: (dimJson.dimensions ?? []).map((d: any) => ({
-            id: d.id,
-            code: d.code,
-            valueCode: d.valueCode,
-            valueName: d.valueName,
-            active: d.active,
-          })),
-          rules: (ruleJson.rules ?? []).map((r: any) => ({
-            id: r.id,
-            vendorId: r.vendorId,
-            priority: r.priority,
-            matchType: r.matchType as MatchType,
-            matchValue: r.matchValue,
-            glAccountNo: r.glAccountNo,
-            dimensionOverrides: r.dimensionOverrides ?? null,
-            active: r.active,
-            comment: r.comment,
-            vendorName: r.vendor?.name ?? null,
-          })),
-          runs: (runJson.runs ?? []).map((r: any) => ({
-            id: r.id,
-            status: r.status,
-            vendorName: r.vendorName ?? null,
-            vendorNo: r.vendorNo ?? null,
-            fileName: r.fileName ?? null,
-            createdAt: r.createdAt ?? null,
-            error: r.error ?? null,
-          })),
-          invoices: (invoiceJson.invoices ?? []).map((inv: any) => ({
-            id: inv.id,
-            invoiceNo: inv.invoiceNo,
-            vendorName: inv.vendor?.name ?? inv.vendorName ?? null,
-            status: inv.status,
-            currencyCode: inv.currencyCode,
-            totalAmount: Number(inv.totalAmount ?? 0),
-            approvals: (inv.approvals ?? []).map((a: any) => ({
-              id: a.id,
-              status: a.status,
-              comment: a.comment,
-              actedAt: a.actedAt ?? a.acted_at ?? null,
-              createdAt: (a.createdAt ?? a.created_at)?.toString?.() ?? "",
-            })),
-          })),
-        };
-
-        memoryCache = next;
-        sessionStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-        setData(next);
+        const next = normalizeDatabaseSnapshot({
+          vendorsJson,
+          glJson,
+          dimJson,
+          ruleJson,
+          runJson,
+          invoiceJson,
+        });
+        const entry = writeCache(CACHE_KEY, next);
+        setData(entry.data);
         setIsReady(true);
+        setLastUpdated(entry.updatedAt);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load data");
+        setIsReady(true);
       }
     });
-  };
+  }, [router, startTransition]);
 
-  const contentReady = useMemo(() => isReady || data !== emptySnapshot, [isReady, data]);
+  useEffect(() => {
+    const cachedEntry = readCache<DatabaseSnapshot>(CACHE_KEY);
+    if (cachedEntry) {
+      setData(cachedEntry.data);
+      setLastUpdated(cachedEntry.updatedAt);
+    }
+    setIsReady(true);
+  }, []);
+
+  // Initial fetch if no cache yet or data is stale.
+  useEffect(() => {
+    if (!isReady) return;
+    if (!shouldRefresh) return;
+    void refreshData();
+  }, [isReady, shouldRefresh, refreshData]);
+
+  const contentReady = useMemo(() => isReady || data !== emptyDatabaseSnapshot, [isReady, data]);
 
   return (
     <main className="min-h-screen bg-white p-8 text-slate-900">

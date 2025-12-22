@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { readCache, writeCache } from "@/lib/client-cache";
 
 type InboxItem = {
   stepId: string;
@@ -29,6 +30,9 @@ type InboxItem = {
   approver: { id: string; name: string | null; email: string };
   actingAsSubstitute: boolean;
 };
+
+const CACHE_KEY = "approvals-inbox-v1";
+const CACHE_TTL_MS = 30_000;
 
 const toText = (value: unknown) => {
   if (value === null || value === undefined) return "";
@@ -72,10 +76,15 @@ export default function ApprovalsInboxPage() {
   const [items, setItems] = useState<InboxItem[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isReady, setIsReady] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<number | null>(null);
   const [isRefreshing, startTransition] = useTransition();
   const [actingOnId, setActingOnId] = useState<string | null>(null);
+  const shouldRefresh = useMemo(
+    () => lastUpdated == null || Date.now() - lastUpdated > CACHE_TTL_MS,
+    [lastUpdated],
+  );
 
-  const refresh = () => {
+  const refresh = useCallback(() => {
     startTransition(async () => {
       try {
         setError(null);
@@ -86,20 +95,31 @@ export default function ApprovalsInboxPage() {
           return;
         }
         if (!res.ok) throw new Error(json.error ?? "Failed to load approvals");
-        setItems((json.items ?? []) as InboxItem[]);
+        const entry = writeCache<InboxItem[]>(CACHE_KEY, (json.items ?? []) as InboxItem[]);
+        setItems(entry.data);
         setIsReady(true);
+        setLastUpdated(entry.updatedAt);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load approvals");
         setIsReady(true);
       }
     });
-  };
+  }, [router, startTransition]);
 
   useEffect(() => {
-    if (isReady) return;
+    const cachedEntry = readCache<InboxItem[]>(CACHE_KEY);
+    if (cachedEntry) {
+      setItems(cachedEntry.data);
+      setLastUpdated(cachedEntry.updatedAt);
+    }
+    setIsReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (!isReady) return;
+    if (!shouldRefresh) return;
     refresh();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isReady]);
+  }, [isReady, shouldRefresh, refresh]);
 
   const contentReady = useMemo(() => isReady || items.length > 0, [isReady, items.length]);
 
