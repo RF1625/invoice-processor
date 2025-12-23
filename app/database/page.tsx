@@ -4,8 +4,9 @@ import { useCallback, useEffect, useMemo, useState, useTransition } from "react"
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { VendorManager, RuleManager, GlAccountManager, DimensionManager, InvoiceApprovalPanel } from "./forms";
-import { emptyDatabaseSnapshot, normalizeDatabaseSnapshot, type DatabaseSnapshot } from "@/lib/database-cache";
-import { readCache, writeCache } from "@/lib/client-cache";
+import { emptyDatabaseSnapshot, type DatabaseSnapshot } from "@/lib/database-cache";
+import { fetchAndCache, readCache } from "@/lib/client-cache";
+import { fetchDatabaseSnapshot } from "@/lib/nav-prefetch";
 
 const CACHE_KEY = "db-cache-v1";
 const CACHE_TTL_MS = 120_000;
@@ -26,49 +27,15 @@ export default function DatabasePage() {
     startTransition(async () => {
       try {
         setError(null);
-        const [vendorsRes, glRes, dimRes, ruleRes, runRes, invoiceRes] = await Promise.all([
-          fetch("/api/vendors", { cache: "no-store" }),
-          fetch("/api/gl-accounts", { cache: "no-store" }),
-          fetch("/api/dimensions", { cache: "no-store" }),
-          fetch("/api/vendor-rules", { cache: "no-store" }),
-          fetch("/api/invoice-runs", { cache: "no-store" }),
-          fetch("/api/invoices?take=10", { cache: "no-store" }),
-        ]);
-
-        if (vendorsRes.status === 401 || glRes.status === 401 || dimRes.status === 401 || ruleRes.status === 401 || runRes.status === 401 || invoiceRes.status === 401) {
-          router.push("/login?redirect=/database");
-          return;
-        }
-
-        const [vendorsJson, glJson, dimJson, ruleJson, runJson, invoiceJson] = await Promise.all([
-          vendorsRes.json(),
-          glRes.json(),
-          dimRes.json(),
-          ruleRes.json(),
-          runRes.json(),
-          invoiceRes.json(),
-        ]);
-
-        if (!vendorsRes.ok) throw new Error(vendorsJson.error ?? "Failed to load vendors");
-        if (!glRes.ok) throw new Error(glJson.error ?? "Failed to load GL accounts");
-        if (!dimRes.ok) throw new Error(dimJson.error ?? "Failed to load dimensions");
-        if (!ruleRes.ok) throw new Error(ruleJson.error ?? "Failed to load rules");
-        if (!runRes.ok) throw new Error(runJson.error ?? "Failed to load runs");
-        if (!invoiceRes.ok) throw new Error(invoiceJson.error ?? "Failed to load invoices");
-
-        const next = normalizeDatabaseSnapshot({
-          vendorsJson,
-          glJson,
-          dimJson,
-          ruleJson,
-          runJson,
-          invoiceJson,
-        });
-        const entry = writeCache(CACHE_KEY, next);
+        const entry = await fetchAndCache(CACHE_KEY, fetchDatabaseSnapshot);
         setData(entry.data);
         setIsReady(true);
         setLastUpdated(entry.updatedAt);
       } catch (err) {
+        if (err instanceof Error && err.message.includes("Unauthorized")) {
+          router.push("/login?redirect=/database");
+          return;
+        }
         setError(err instanceof Error ? err.message : "Failed to load data");
         setIsReady(true);
       }

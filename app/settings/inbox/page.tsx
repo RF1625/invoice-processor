@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { readCache, writeCache } from "@/lib/client-cache";
+import { fetchAndCache, readCache } from "@/lib/client-cache";
+import { fetchMailboxes } from "@/lib/nav-prefetch";
 
 const DEFAULT_MAX_MESSAGES = 10;
 const DEFAULT_SUBJECT_KEYWORDS = ["invoice", "bill", "payment", "statement"];
@@ -117,14 +118,16 @@ function InboxContent() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/mailboxes", { cache: "no-store" });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? "Failed to load mailboxes");
-      const entry = writeCache<MailboxRow[]>(CACHE_KEY, json.mailboxes ?? []);
+      const entry = await fetchAndCache<MailboxRow[]>(CACHE_KEY, fetchMailboxes);
       setMailboxes(entry.data);
       setIsReady(true);
       setLastUpdated(entry.updatedAt);
     } catch (err) {
+      if (err instanceof Error && err.message.includes("Unauthorized")) {
+        setError("Please sign in again.");
+        setIsReady(true);
+        return;
+      }
       setError(err instanceof Error ? err.message : "Failed to load mailboxes");
       setIsReady(true);
     } finally {

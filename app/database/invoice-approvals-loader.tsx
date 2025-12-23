@@ -12,6 +12,7 @@ type InvoiceInput = {
   currencyCode?: string | null;
   totalAmount: number;
   approvals: InvoiceApprovalInput[];
+  approvalApprover?: { id: string; name: string | null; email: string } | null;
 };
 
 export function InvoiceApprovalsLoader() {
@@ -40,6 +41,9 @@ export function InvoiceApprovalsLoader() {
           actedAt: a.actedAt ?? a.acted_at ?? null,
           createdAt: (a.createdAt ?? a.created_at)?.toString?.() ?? "",
         })),
+        approvalApprover: inv.approvalApprover
+          ? { id: inv.approvalApprover.id, name: inv.approvalApprover.name ?? null, email: inv.approvalApprover.email }
+          : null,
       }));
       if (!activeRef || activeRef.current) setInvoices(mapped);
     } catch (err) {

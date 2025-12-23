@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { DimensionInput, GlAccountInput, InvoiceInput, RuleInput, VendorInput } from "@/lib/database-cache";
@@ -224,6 +224,47 @@ export function InvoiceApprovalPanel({ invoices }: { invoices: InvoiceInput[] })
   const router = useRouter();
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [approverOptions, setApproverOptions] = useState<{ id: string; label: string; active: boolean }[]>([]);
+  const [approverOverrides, setApproverOverrides] = useState<Record<string, string | null>>({});
+  const [approverLoading, setApproverLoading] = useState(true);
+  const [approverSavingId, setApproverSavingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const next: Record<string, string | null> = {};
+    invoices.forEach((inv) => {
+      next[inv.id] = inv.approvalApprover?.id ?? null;
+    });
+    setApproverOverrides(next);
+  }, [invoices]);
+
+  useEffect(() => {
+    let active = true;
+    const loadApprovers = async () => {
+      setApproverLoading(true);
+      try {
+        const res = await fetch("/api/approval-setups", { cache: "no-store" });
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(json.error ?? "Failed to load approvers");
+        const options = (json.users ?? []).map((u: any) => {
+          const label = u.name ? `${u.name} (${u.email})` : u.email;
+          const hasSetup = Boolean(u.setup);
+          const active = hasSetup && u.setup?.active !== false;
+          const suffix = hasSetup ? (active ? "" : " (inactive)") : " (needs setup)";
+          return { id: u.userId, label: `${label}${suffix}`, active };
+        });
+        if (active) setApproverOptions(options);
+      } catch (err) {
+        if (active) setError(err instanceof Error ? err.message : "Failed to load approvers");
+      } finally {
+        if (active) setApproverLoading(false);
+      }
+    };
+
+    void loadApprovers();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const setApproval = async (invoiceId: string, status: "pending" | "approved" | "rejected", comment?: string | null) => {
     setLoadingId(invoiceId);
@@ -260,6 +301,28 @@ export function InvoiceApprovalPanel({ invoices }: { invoices: InvoiceInput[] })
     void setApproval(invoiceId, "pending", null);
   };
 
+  const assignApprover = async (invoiceId: string, approverUserId: string | null) => {
+    const previous = approverOverrides[invoiceId] ?? null;
+    setApproverSavingId(invoiceId);
+    setApproverOverrides((current) => ({ ...current, [invoiceId]: approverUserId }));
+    setError(null);
+    try {
+      const res = await fetch(`/api/invoices/${invoiceId}/approver`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ approverUserId }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json.error ?? "Failed to update approver");
+      router.refresh();
+    } catch (err) {
+      setApproverOverrides((current) => ({ ...current, [invoiceId]: previous }));
+      setError(err instanceof Error ? err.message : "Failed to update approver");
+    } finally {
+      setApproverSavingId(null);
+    }
+  };
+
   return (
     <section className="rounded-xl border border-slate-200 bg-white p-4">
       <div className="flex items-center justify-between">
@@ -270,9 +333,10 @@ export function InvoiceApprovalPanel({ invoices }: { invoices: InvoiceInput[] })
         {error && <div className="text-xs text-red-600">{error}</div>}
       </div>
       <div className="mt-3 overflow-hidden rounded-lg border border-slate-100">
-        <div className="grid grid-cols-6 bg-slate-50 px-3 py-2 text-xs font-semibold uppercase text-slate-600">
+        <div className="grid grid-cols-7 bg-slate-50 px-3 py-2 text-xs font-semibold uppercase text-slate-600">
           <span>Invoice #</span>
           <span>Vendor</span>
+          <span>Approver</span>
           <span>Status</span>
           <span className="text-right">Total</span>
           <span>Last approval</span>
@@ -281,10 +345,47 @@ export function InvoiceApprovalPanel({ invoices }: { invoices: InvoiceInput[] })
         <ul className="divide-y divide-slate-100 text-sm">
           {invoices.map((inv) => {
             const lastApproval = inv.approvals[0];
+            const assignedApproverId = approverOverrides[inv.id] ?? inv.approvalApprover?.id ?? null;
+            const selectValue = assignedApproverId ?? "__auto__";
+            const fallbackApprover =
+              inv.approvalApprover && !approverOptions.some((opt) => opt.id === inv.approvalApprover?.id)
+                ? {
+                    id: inv.approvalApprover.id,
+                    label: inv.approvalApprover.name
+                      ? `${inv.approvalApprover.name} (${inv.approvalApprover.email})`
+                      : inv.approvalApprover.email,
+                  }
+                : null;
             return (
-              <li key={inv.id} className="grid grid-cols-6 items-center px-3 py-3">
+              <li key={inv.id} className="grid grid-cols-7 items-center px-3 py-3">
                 <div className="font-mono text-slate-800">{inv.invoiceNo ?? "—"}</div>
                 <div className="text-slate-800">{inv.vendorName ?? "—"}</div>
+                <div>
+                  <Select
+                    value={selectValue}
+                    onValueChange={(value) => {
+                      const next = value === "__auto__" ? null : value;
+                      if (next === assignedApproverId) return;
+                      void assignApprover(inv.id, next);
+                    }}
+                    disabled={approverLoading || approverSavingId === inv.id}
+                  >
+                    <SelectTrigger className="h-8 w-full text-xs">
+                      <SelectValue placeholder={approverLoading ? "Loading..." : "Auto"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__auto__">Auto (approval chain)</SelectItem>
+                      {fallbackApprover && (
+                        <SelectItem value={fallbackApprover.id}>{fallbackApprover.label}</SelectItem>
+                      )}
+                      {approverOptions.map((opt) => (
+                        <SelectItem key={opt.id} value={opt.id} disabled={!opt.active}>
+                          {opt.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
                 <div className="flex items-center gap-2">{statusBadge(inv.status)}</div>
                 <div className="text-right font-semibold text-slate-900">
                   {inv.currencyCode ?? ""} {inv.totalAmount.toFixed(2)}
@@ -326,7 +427,7 @@ export function InvoiceApprovalPanel({ invoices }: { invoices: InvoiceInput[] })
                   </button>
                 </div>
                 {inv.approvals.length > 0 && (
-                  <div className="col-span-6 mt-2 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                  <div className="col-span-7 mt-2 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
                     <div className="font-semibold text-slate-700">History</div>
                     <ul className="mt-1 space-y-1">
                       {inv.approvals.map((a) => (

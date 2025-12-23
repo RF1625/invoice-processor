@@ -65,6 +65,19 @@ const normalizeVendorName = (raw: string) =>
     .replace(/[‘’]/g, "'")
     .trim();
 
+const normalizeNzGstNumber = (raw?: string | null) => {
+  if (!raw) return null;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  const digits = trimmed.replace(/\D/g, "");
+  if (!digits) return trimmed;
+  const normalized = digits.length === 8 ? `0${digits}` : digits;
+  if (normalized.length === 9) {
+    return `${normalized.slice(0, 3)}-${normalized.slice(3, 6)}-${normalized.slice(6)}`;
+  }
+  return trimmed;
+};
+
 const isLikelyJunkVendorName = (name: string) => {
   const normalized = normalizeVendorName(name).toLowerCase();
   if (normalized.length < 3) return true;
@@ -280,7 +293,7 @@ export async function applyVendorRulesAndLog(params: {
               firmId,
               vendorNo,
               name: vendorText,
-              gstNumber: invoice.gstNumber ?? null,
+              gstNumber: normalizeNzGstNumber(invoice.gstNumber),
               defaultCurrency: invoice.currencyCode ?? null,
               active: true,
             },

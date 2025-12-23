@@ -95,6 +95,7 @@ model User {
   purchaseOrdersUpdated PurchaseOrder[] @relation("PurchaseOrderUpdatedBy")
   invoiceCreated Invoice[] @relation("InvoiceCreatedBy")
   invoiceUpdated Invoice[] @relation("InvoiceUpdatedBy")
+  invoiceApprovalAssignments Invoice[] @relation("InvoiceApprovalAssignee")
   invoiceApprovals InvoiceApproval[]
   mailboxes       Mailbox[]
   requestedApprovalPlans InvoiceApprovalPlan[] @relation("InvoiceApprovalPlanRequester")
@@ -285,8 +286,10 @@ model Invoice {
   postedAt        DateTime?     @map("posted_at")
   createdBy       String?       @map("created_by") @db.Uuid
   updatedBy       String?       @map("updated_by") @db.Uuid
+  approvalApproverId String?    @map("approval_approver_id") @db.Uuid
   createdByUser   User?         @relation("InvoiceCreatedBy", fields: [createdBy], references: [id])
   updatedByUser   User?         @relation("InvoiceUpdatedBy", fields: [updatedBy], references: [id])
+  approvalApprover User?        @relation("InvoiceApprovalAssignee", fields: [approvalApproverId], references: [id])
   createdAt       DateTime      @default(now()) @map("created_at")
   updatedAt       DateTime      @default(now()) @updatedAt @map("updated_at")
   lines           InvoiceLine[]

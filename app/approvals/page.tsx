@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { readCache, writeCache } from "@/lib/client-cache";
+import { fetchAndCache, readCache } from "@/lib/client-cache";
+import { fetchApprovalsInbox } from "@/lib/nav-prefetch";
 
 type InboxItem = {
   stepId: string;
@@ -88,18 +89,15 @@ export default function ApprovalsInboxPage() {
     startTransition(async () => {
       try {
         setError(null);
-        const res = await fetch("/api/approvals/inbox", { cache: "no-store" });
-        const json = await res.json().catch(() => ({}));
-        if (res.status === 401) {
-          router.push("/login?redirect=/approvals");
-          return;
-        }
-        if (!res.ok) throw new Error(json.error ?? "Failed to load approvals");
-        const entry = writeCache<InboxItem[]>(CACHE_KEY, (json.items ?? []) as InboxItem[]);
+        const entry = await fetchAndCache<InboxItem[]>(CACHE_KEY, fetchApprovalsInbox);
         setItems(entry.data);
         setIsReady(true);
         setLastUpdated(entry.updatedAt);
       } catch (err) {
+        if (err instanceof Error && err.message.includes("Unauthorized")) {
+          router.push("/login?redirect=/approvals");
+          return;
+        }
         setError(err instanceof Error ? err.message : "Failed to load approvals");
         setIsReady(true);
       }

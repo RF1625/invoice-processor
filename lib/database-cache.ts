@@ -34,6 +34,7 @@ export type RunInput = {
   error?: string | null;
 };
 export type InvoiceApprovalInput = { id: string; status: string; comment?: string | null; actedAt?: string | null; createdAt: string };
+export type InvoiceApproverInput = { id: string; name: string | null; email: string };
 export type InvoiceInput = {
   id: string;
   invoiceNo?: string | null;
@@ -42,6 +43,7 @@ export type InvoiceInput = {
   currencyCode?: string | null;
   totalAmount: number;
   approvals: InvoiceApprovalInput[];
+  approvalApprover?: InvoiceApproverInput | null;
 };
 
 export type DatabaseSnapshot = {
@@ -127,5 +129,12 @@ export const normalizeDatabaseSnapshot = (payload: {
       actedAt: a.actedAt ?? a.acted_at ?? null,
       createdAt: (a.createdAt ?? a.created_at)?.toString?.() ?? "",
     })),
+    approvalApprover: inv.approvalApprover
+      ? {
+          id: inv.approvalApprover.id,
+          name: inv.approvalApprover.name ?? null,
+          email: inv.approvalApprover.email,
+        }
+      : null,
   })),
 });

@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { AlertTriangle, CheckCircle2, Mail, RefreshCw, Upload } from "lucide-react";
-import { readCache, writeCache } from "@/lib/client-cache";
+import { fetchAndCache, readCache } from "@/lib/client-cache";
+import { fetchDashboardRuns } from "@/lib/nav-prefetch";
 
 type Run = {
   id: string;
@@ -40,14 +41,16 @@ export default function DashboardPage() {
     startRefresh(async () => {
       try {
         setError(null);
-        const res = await fetch("/api/invoice-runs", { cache: "no-store" });
-        const json = await res.json();
-        if (!res.ok) throw new Error(json.error ?? "Failed to load activity");
-        const entry = writeCache<Run[]>(CACHE_KEY, json.runs ?? []);
+        const entry = await fetchAndCache<Run[]>(CACHE_KEY, fetchDashboardRuns);
         setRuns(entry.data);
         setIsReady(true);
         setLastUpdated(entry.updatedAt);
       } catch (err) {
+        if (err instanceof Error && err.message.includes("Unauthorized")) {
+          setError("Please sign in again.");
+          setIsReady(true);
+          return;
+        }
         setError(err instanceof Error ? err.message : "Failed to load activity");
         setIsReady(true);
       }

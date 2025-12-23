@@ -3,8 +3,9 @@
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ApprovalsClient } from "./ui";
-import { normalizeApprovalUsers, type ApprovalSettingsCache, type ApprovalUserRow } from "@/lib/approvals-cache";
-import { readCache, writeCache } from "@/lib/client-cache";
+import { type ApprovalSettingsCache, type ApprovalUserRow } from "@/lib/approvals-cache";
+import { fetchAndCache, readCache, writeCache } from "@/lib/client-cache";
+import { fetchApprovalSettings } from "@/lib/nav-prefetch";
 
 const CACHE_KEY = "approvals-cache-v1";
 const CACHE_TTL_MS = 60_000;
@@ -40,28 +41,22 @@ export default function ApprovalSettingsPage() {
     startRefresh(async () => {
       try {
         setError(null);
-        const res = await fetch("/api/approval-setups", { cache: "no-store" });
-        const json = await res.json().catch(() => ({}));
-        if (res.status === 401) {
-          router.push("/login?redirect=/settings/approvals");
-          return;
-        }
-        if (res.status === 403) {
-          const entry = writeCache<ApprovalSettingsCache>(CACHE_KEY, { users: [], forbidden: true });
+        const entry = await fetchAndCache<ApprovalSettingsCache>(CACHE_KEY, fetchApprovalSettings);
+        if (entry.data.forbidden) {
           setIsForbidden(true);
           setIsReady(true);
           setLastUpdated(entry.updatedAt);
           return;
         }
-        if (!res.ok) throw new Error(json.error ?? "Failed to load approval setups");
-
-        const normalized = normalizeApprovalUsers(json.users ?? []);
-        const entry = writeCache<ApprovalSettingsCache>(CACHE_KEY, { users: normalized, forbidden: false });
         setUsers(entry.data.users);
         setIsForbidden(false);
         setIsReady(true);
         setLastUpdated(entry.updatedAt);
       } catch (err) {
+        if (err instanceof Error && err.message.includes("Unauthorized")) {
+          router.push("/login?redirect=/settings/approvals");
+          return;
+        }
         setError(err instanceof Error ? err.message : "Failed to load approval setups");
         setIsReady(true);
       }

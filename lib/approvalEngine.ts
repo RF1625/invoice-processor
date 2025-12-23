@@ -115,13 +115,25 @@ export async function ensureActiveInvoiceApprovalPlan(
 
   const invoice = await tx.invoice.findFirst({
     where: { id: opts.invoiceId, firmId: opts.firmId },
-    select: { id: true, status: true, totalAmount: true, currencyCode: true },
+    select: { id: true, status: true, totalAmount: true, currencyCode: true, approvalApproverId: true },
   });
   if (!invoice) throw new ApprovalEngineError(404, "Invoice not found");
   if (invoice.status === "posted") throw new ApprovalEngineError(400, "Invoice is already posted");
 
   const amount = normalizeInvoiceAmount(invoice.totalAmount);
-  const chain = await buildApproverChain(tx, { firmId: opts.firmId, requesterUserId: opts.requesterUserId, amount });
+  let chain: string[];
+  if (invoice.approvalApproverId) {
+    const setup = await getApprovalSetup(tx, opts.firmId, invoice.approvalApproverId);
+    if (!setup) {
+      throw new ApprovalEngineError(400, "Assigned approver is missing approval setup");
+    }
+    if (!setup.active) {
+      throw new ApprovalEngineError(400, "Assigned approver is not active for approvals");
+    }
+    chain = [invoice.approvalApproverId];
+  } else {
+    chain = await buildApproverChain(tx, { firmId: opts.firmId, requesterUserId: opts.requesterUserId, amount });
+  }
 
   let created;
   try {

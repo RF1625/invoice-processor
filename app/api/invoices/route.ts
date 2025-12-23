@@ -12,6 +12,7 @@ export async function GET(req: NextRequest) {
       include: {
         vendor: true,
         approvals: { orderBy: { createdAt: "desc" } },
+        approvalApprover: { select: { id: true, name: true, email: true } },
       },
       orderBy: { createdAt: "desc" },
       take,

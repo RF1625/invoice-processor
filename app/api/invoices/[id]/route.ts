@@ -13,6 +13,7 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ id: st
         vendor: true,
         approvals: { orderBy: { createdAt: "desc" } },
         files: true,
+        approvalApprover: { select: { id: true, name: true, email: true } },
       },
     });
     if (!invoice) return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
