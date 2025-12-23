@@ -157,10 +157,13 @@ export async function analyzeInvoiceBuffer(
   }
 
   const invoice = buildInvoiceSummary(doc);
+  const stringIndexType = "stringIndexType" in result
+    ? (result as { stringIndexType?: unknown }).stringIndexType
+    : undefined;
   const analysisResult = {
     apiVersion: result.apiVersion,
     modelId: result.modelId,
-    stringIndexType: result.stringIndexType,
+    stringIndexType,
     content: result.content ?? null,
     pages: result.pages ?? [],
     paragraphs: result.paragraphs ?? [],
