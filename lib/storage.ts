@@ -1,7 +1,10 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 
-const STORAGE_ROOT = process.env.STORAGE_ROOT ?? path.join(process.cwd(), "storage");
+const DEFAULT_STORAGE_ROOT = process.env.VERCEL
+  ? "/tmp/invoice-processor"
+  : path.join(process.cwd(), "storage");
+const STORAGE_ROOT = process.env.STORAGE_ROOT ?? DEFAULT_STORAGE_ROOT;
 
 export async function persistFile(buffer: Buffer, storagePath: string) {
   const safePath = storagePath.replace(/^\/+/, "");

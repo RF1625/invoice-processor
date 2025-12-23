@@ -20,6 +20,7 @@ type ApiResult = {
   pagesAnalyzed?: number;
   modelId?: string;
   navValidationError?: string | null;
+  analysisResult?: unknown;
 };
 
 export default function UploadPage() {
@@ -27,7 +28,9 @@ export default function UploadPage() {
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [errorDetails, setErrorDetails] = useState<string | null>(null);
   const [result, setResult] = useState<ApiResult | null>(null);
+  const isFileTooLarge = Boolean(error && error.toLowerCase().includes("too large"));
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -37,6 +40,7 @@ export default function UploadPage() {
     }
     setLoading(true);
     setError(null);
+    setErrorDetails(null);
     setResult(null);
     try {
       const formData = new FormData();
@@ -55,6 +59,7 @@ export default function UploadPage() {
       const json = await res.json();
       if (!res.ok) {
         setError(json.error ?? "Upload failed");
+        setErrorDetails(json.details ?? null);
         return;
       }
       setResult(json);
@@ -109,6 +114,7 @@ export default function UploadPage() {
                   setFile(null);
                   setResult(null);
                   setError(null);
+                  setErrorDetails(null);
                 }}
               >
                 Reset
@@ -117,9 +123,31 @@ export default function UploadPage() {
           </form>
 
           {error && (
-            <div className="mt-4 inline-flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-              <AlertCircle className="h-4 w-4" />
-              {error}
+            <div className="mt-4 space-y-2">
+              <div className="inline-flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                <AlertCircle className="h-4 w-4" />
+                {error}
+              </div>
+              {isFileTooLarge ? (
+                <div className="text-xs text-amber-900">
+                  Tip: compress the PDF and try again (for example{" "}
+                  <a
+                    href="https://www.ilovepdf.com/compress_pdf"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="font-semibold underline-offset-4 hover:underline"
+                  >
+                    ilovepdf.com/compress_pdf
+                  </a>
+                  ), or re-export at a lower DPI.
+                </div>
+              ) : null}
+              {errorDetails ? (
+                <details className="rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                  <summary className="cursor-pointer font-semibold text-amber-900">Error details</summary>
+                  <pre className="mt-2 whitespace-pre-wrap">{errorDetails}</pre>
+                </details>
+              ) : null}
             </div>
           )}
 
@@ -171,6 +199,14 @@ export default function UploadPage() {
                   </pre>
                 </details>
               ) : null}
+              <details className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-800">
+                <summary className="cursor-pointer text-sm font-semibold text-slate-900">
+                  Full analyzer response (JSON)
+                </summary>
+                <pre className="mt-2 max-h-72 overflow-auto rounded-lg bg-slate-900 p-3 text-xs text-slate-50">
+                  {JSON.stringify(result, null, 2)}
+                </pre>
+              </details>
             </div>
           )}
         </section>

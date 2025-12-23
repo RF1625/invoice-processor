@@ -157,6 +157,19 @@ export async function analyzeInvoiceBuffer(
   }
 
   const invoice = buildInvoiceSummary(doc);
+  const analysisResult = {
+    apiVersion: result.apiVersion,
+    modelId: result.modelId,
+    stringIndexType: result.stringIndexType,
+    content: result.content ?? null,
+    pages: result.pages ?? [],
+    paragraphs: result.paragraphs ?? [],
+    tables: result.tables ?? [],
+    keyValuePairs: result.keyValuePairs ?? [],
+    styles: result.styles ?? [],
+    languages: result.languages ?? [],
+    documents: result.documents ?? [],
+  };
   const azureRawJson = {
     modelId: result.modelId,
     documents: result.documents ?? [],
@@ -182,5 +195,6 @@ export async function analyzeInvoiceBuffer(
     navValidationError,
     modelId: result.modelId,
     pagesAnalyzed: result.pages?.length ?? 0,
+    analysisResult,
   };
 }

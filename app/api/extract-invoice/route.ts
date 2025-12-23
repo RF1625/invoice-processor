@@ -43,8 +43,17 @@ export async function POST(req: NextRequest) {
     const checksum = crypto.createHash("sha256").update(bytes).digest("hex");
     const storagePath = `local-upload/${firmId}/${Date.now()}-${fileName ?? "upload"}`;
 
-    const { processedInvoice, navPayload, ruleApplications, runId, invoiceId, modelId, pagesAnalyzed, navValidationError } =
-      await analyzeInvoiceBuffer(bytes, {
+    const {
+      processedInvoice,
+      navPayload,
+      ruleApplications,
+      runId,
+      invoiceId,
+      modelId,
+      pagesAnalyzed,
+      navValidationError,
+      analysisResult,
+    } = await analyzeInvoiceBuffer(bytes, {
         fileName,
         firmId,
         fileMeta: {
@@ -68,6 +77,7 @@ export async function POST(req: NextRequest) {
         invoiceId,
         navUseMock: process.env.NAV_USE_MOCK === "true",
         navValidationError,
+        analysisResult,
       },
       { status: 200 },
     );
