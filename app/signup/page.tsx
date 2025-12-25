@@ -6,6 +6,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { readJson } from "@/lib/http";
 
 export default function SignupPage() {
   const router = useRouter();
@@ -26,7 +27,7 @@ export default function SignupPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password, name, firmName }),
       });
-      const json = await res.json();
+      const json = await readJson<{ error?: string }>(res);
       if (!res.ok) {
         setError(json.error ?? "Sign up failed");
         return;

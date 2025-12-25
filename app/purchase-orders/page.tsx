@@ -8,6 +8,7 @@ import { DatePicker } from "@/components/ui/date-picker";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { readJson } from "@/lib/http";
 
 const currency = (value?: number | string | null) => {
   const num = typeof value === "string" ? Number(value) : value ?? 0;
@@ -59,8 +60,8 @@ export default function PurchaseOrdersPage() {
         fetch("/api/purchase-orders", { cache: "no-store" }),
         fetch("/api/vendors", { cache: "no-store" }),
       ]);
-      const ordersJson = await ordersRes.json();
-      const vendorsJson = await vendorsRes.json();
+      const ordersJson = await readJson<{ purchaseOrders?: PurchaseOrder[]; error?: string }>(ordersRes);
+      const vendorsJson = await readJson<{ vendors?: Vendor[]; error?: string }>(vendorsRes);
       if (!ordersRes.ok) throw new Error(ordersJson.error ?? "Failed to load POs");
       if (!vendorsRes.ok) throw new Error(vendorsJson.error ?? "Failed to load vendors");
       setOrders(ordersJson.purchaseOrders ?? []);
@@ -111,7 +112,7 @@ export default function PurchaseOrdersPage() {
           })),
         }),
       });
-      const json = await res.json();
+      const json = await readJson<{ error?: string }>(res);
       if (!res.ok) throw new Error(json.error ?? "Failed to create PO");
       setForm({ poNumber: "", vendorId: "", currencyCode: "", orderDate: "", expectedDate: "", notes: "" });
       setLines([{ description: "", quantity: 1, unitCost: 0 }]);

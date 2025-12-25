@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { fetchAndCache, readCache } from "@/lib/client-cache";
 import { fetchMailboxes } from "@/lib/nav-prefetch";
+import { readJson } from "@/lib/http";
 
 const DEFAULT_MAX_MESSAGES = 10;
 const DEFAULT_SUBJECT_KEYWORDS = ["invoice", "bill", "payment", "statement"];
@@ -159,7 +160,7 @@ function InboxContent() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ sinceDays }),
       });
-      const json = await res.json();
+      const json = await readJson<any>(res);
       if (!res.ok || !json.ok) throw new Error(json.error ?? "Failed to summarize inbox");
       setSummary(json as MailboxSummary);
     } catch (err) {
@@ -206,7 +207,7 @@ function InboxContent() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      const json = await res.json();
+      const json = await readJson<any>(res);
       if (!res.ok) throw new Error(json.error ?? "Failed to save mailbox");
       setMessage("Custom IMAP inbox saved. Test it below.");
       setForm((prev) => ({ ...prev, password: "" }));
@@ -228,7 +229,7 @@ function InboxContent() {
     setError(null);
     try {
       const res = await fetch(`/api/mailboxes/${id}/test`, { method: "POST" });
-      const json = await res.json();
+      const json = await readJson<any>(res);
       if (!res.ok || !json.ok) {
         throw new Error(json.error ?? "Mailbox test failed");
       }
@@ -247,7 +248,7 @@ function InboxContent() {
     setError(null);
     try {
       const res = await fetch(`/api/mailboxes/${id}/ingest`, { method: "POST" });
-      const json = await res.json();
+      const json = await readJson<any>(res);
       if (!res.ok || json.error) {
         throw new Error(json.error ?? "Ingest failed");
       }
@@ -270,7 +271,7 @@ function InboxContent() {
     try {
       if (action === "new") {
         const res = await fetch(`/api/mailboxes/${summaryMailboxId}/checkpoint`, { method: "POST" });
-        const json = await res.json();
+        const json = await readJson<any>(res);
         if (!res.ok || json.error) throw new Error(json.error ?? "Failed to set checkpoint");
         setMessage("Checkpoint set. Future ingests will only take new mail from now.");
       } else if (action === "backfill30") {
@@ -279,7 +280,7 @@ function InboxContent() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ sinceDays: 30 }),
         });
-        const json = await res.json();
+        const json = await readJson<any>(res);
         if (!res.ok || json.error) throw new Error(json.error ?? "Backfill failed");
         setMessage(`Backfill complete - processed ${json.processedCount ?? json.processed?.length ?? 0} attachment(s)`);
       } else if (action === "backfill90") {
@@ -288,7 +289,7 @@ function InboxContent() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ sinceDays: 90 }),
         });
-        const json = await res.json();
+        const json = await readJson<any>(res);
         if (!res.ok || json.error) throw new Error(json.error ?? "Backfill failed");
         setMessage(`Backfill complete - processed ${json.processedCount ?? json.processed?.length ?? 0} attachment(s)`);
       } else if (action === "samples") {
@@ -297,7 +298,7 @@ function InboxContent() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ sinceDays: 90, maxMessages: 5 }),
         });
-        const json = await res.json();
+        const json = await readJson<any>(res);
         if (!res.ok || json.error) throw new Error(json.error ?? "Sample import failed");
         setMessage(`Sample import complete - processed ${json.processedCount ?? json.processed?.length ?? 0} attachment(s)`);
       }

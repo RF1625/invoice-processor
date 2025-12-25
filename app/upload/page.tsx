@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { AlertCircle, CheckCircle2, Loader2, UploadCloud } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { readJson } from "@/lib/http";
 
 type ApiResult = {
   invoice?: {
@@ -58,7 +59,7 @@ export default function UploadPage() {
         return;
       }
 
-      const json = await res.json();
+      const json = await readJson<ApiResult & { error?: string; details?: string }>(res);
       if (!res.ok) {
         setError(json.error ?? "Upload failed");
         setErrorDetails(json.details ?? null);

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { Check, X, Loader2, AlertCircle, FileText, ChevronDown, ChevronUp, Download } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useRouter } from "next/navigation"
+import { readJson } from "@/lib/http"
 
 type InvoiceApprovalInput = {
     id: string
@@ -41,7 +42,7 @@ export function InvoiceReviewList() {
         setError(null)
         try {
             const res = await fetch("/api/invoices?take=50", { cache: "no-store" })
-            const json = await res.json()
+            const json = await readJson<{ invoices?: any[]; error?: string }>(res)
             if (!res.ok) throw new Error(json.error ?? "Failed to load invoices")
 
             const mapped: InvoiceInput[] = (json.invoices ?? []).map((inv: any) => ({

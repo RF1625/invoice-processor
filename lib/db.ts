@@ -19,6 +19,14 @@ const createPool = () => {
     throw new Error("DATABASE_URL is not set");
   }
 
+  const sslModeFromUrl = (() => {
+    try {
+      return new URL(rawConnectionString).searchParams.get("sslmode")?.toLowerCase() ?? "";
+    } catch {
+      return "";
+    }
+  })();
+
   const pgssl = (process.env.PGSSL ?? "").toLowerCase();
   const sslMode = (process.env.PGSSLMODE ?? "").toLowerCase();
   const sslExplicitlyDisabled = pgssl === "false" || sslMode === "disable";
@@ -36,7 +44,10 @@ const createPool = () => {
     /[?&]sslmode=disable/i.test(rawConnectionString) || /[?&]ssl=false/i.test(rawConnectionString);
   const shouldUseSsl = sslExplicitlyDisabled ? false : sslExplicitlyEnabled ? true : sslFromUrlDisabled ? false : sslFromUrlEnabled;
   const allowSelfSigned =
-    process.env.PGSSL_ALLOW_SELF_SIGNED === "true" || sslMode === "no-verify" || process.env.NODE_ENV !== "production";
+    process.env.PGSSL_ALLOW_SELF_SIGNED === "true" ||
+    sslMode === "no-verify" ||
+    sslModeFromUrl === "no-verify" ||
+    process.env.NODE_ENV !== "production";
 
   const connectionString = stripSslParams(rawConnectionString);
   const config: PoolConfig = {

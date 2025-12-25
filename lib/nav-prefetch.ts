@@ -3,6 +3,7 @@
 import { fetchAndCache, isStale, readCache } from "@/lib/client-cache";
 import { normalizeDatabaseSnapshot, type DatabaseSnapshot } from "@/lib/database-cache";
 import { normalizeApprovalUsers, type ApprovalSettingsCache } from "@/lib/approvals-cache";
+import { readJson } from "@/lib/http";
 
 const DASHBOARD_KEY = "dashboard-runs-v1";
 const APPROVALS_KEY = "approvals-inbox-v1";
@@ -20,7 +21,7 @@ const shouldPrefetch = (key: string, maxAgeMs: number) => isStale(readCache(key)
 
 export const fetchDashboardRuns = async () => {
   const res = await fetch("/api/invoice-runs", { cache: "no-store" });
-  const json = await res.json();
+  const json = await readJson<{ runs?: unknown[]; error?: string }>(res);
   if (res.status === 401) throw new Error("Unauthorized");
   if (!res.ok) throw new Error(json.error ?? "Failed to load activity");
   return json.runs ?? [];
@@ -28,7 +29,7 @@ export const fetchDashboardRuns = async () => {
 
 export const fetchApprovalsInbox = async () => {
   const res = await fetch("/api/approvals/inbox", { cache: "no-store" });
-  const json = await res.json().catch(() => ({}));
+  const json = await readJson<{ items?: unknown[]; error?: string }>(res);
   if (res.status === 401) throw new Error("Unauthorized");
   if (!res.ok) throw new Error(json.error ?? "Failed to load approvals");
   return json.items ?? [];
@@ -36,7 +37,7 @@ export const fetchApprovalsInbox = async () => {
 
 export const fetchMailboxes = async () => {
   const res = await fetch("/api/mailboxes", { cache: "no-store" });
-  const json = await res.json();
+  const json = await readJson<{ mailboxes?: unknown[]; error?: string }>(res);
   if (res.status === 401) throw new Error("Unauthorized");
   if (!res.ok) throw new Error(json.error ?? "Failed to load mailboxes");
   return json.mailboxes ?? [];
@@ -44,7 +45,7 @@ export const fetchMailboxes = async () => {
 
 export const fetchApprovalSettings = async (): Promise<ApprovalSettingsCache> => {
   const res = await fetch("/api/approval-setups", { cache: "no-store" });
-  const json = await res.json().catch(() => ({}));
+  const json = await readJson<{ users?: unknown[]; error?: string }>(res);
   if (res.status === 401) throw new Error("Unauthorized");
   if (res.status === 403) return { users: [], forbidden: true };
   if (!res.ok) throw new Error(json.error ?? "Failed to load approval setups");
@@ -53,7 +54,15 @@ export const fetchApprovalSettings = async (): Promise<ApprovalSettingsCache> =>
 
 export const fetchDatabaseSnapshot = async (): Promise<DatabaseSnapshot> => {
   const res = await fetch("/api/database-snapshot", { cache: "no-store" });
-  const json = await res.json().catch(() => ({}));
+  const json = await readJson<{
+    vendors?: unknown[];
+    glAccounts?: unknown[];
+    dimensions?: unknown[];
+    rules?: unknown[];
+    runs?: unknown[];
+    invoices?: unknown[];
+    error?: string;
+  }>(res);
   if (res.status === 401) throw new Error("Unauthorized");
   if (!res.ok) throw new Error(json.error ?? "Failed to load database snapshot");
   return normalizeDatabaseSnapshot({

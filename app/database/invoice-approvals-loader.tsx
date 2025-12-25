@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { InvoiceApprovalPanel } from "./forms";
+import { readJson } from "@/lib/http";
 
 type InvoiceApprovalInput = { id: string; status: string; comment?: string | null; actedAt?: string | null; createdAt: string };
 type InvoiceInput = {
@@ -26,7 +27,7 @@ export function InvoiceApprovalsLoader() {
     setError(null);
     try {
       const res = await fetch("/api/invoices?take=10", { cache: "no-store" });
-      const json = await res.json();
+      const json = await readJson<{ invoices?: any[]; error?: string }>(res);
       if (!res.ok) throw new Error(json.error ?? "Failed to load invoices");
       const mapped: InvoiceInput[] = (json.invoices ?? []).map((inv: any) => ({
         id: inv.id,

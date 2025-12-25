@@ -9,6 +9,7 @@ import { DatePicker } from "@/components/ui/date-picker";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { readJson } from "@/lib/http";
 
 const currency = (value?: number | string | null, code?: string | null) => {
   const num = typeof value === "string" ? Number(value) : value ?? 0;
@@ -72,7 +73,7 @@ export default function PurchaseOrderDetailPage() {
     setError(null);
     try {
       const res = await fetch(`/api/purchase-orders/${params.id}`, { cache: "no-store" });
-      const json = await res.json();
+      const json = await readJson<{ purchaseOrder?: PurchaseOrder; error?: string }>(res);
       if (!res.ok) throw new Error(json.error ?? "Failed to load PO");
       const normalizedLines: Line[] = (json.purchaseOrder.lines ?? []).map((line: Line) => ({
         ...line,
@@ -130,7 +131,7 @@ export default function PurchaseOrderDetailPage() {
           })),
         }),
       });
-      const json = await res.json();
+      const json = await readJson<{ purchaseOrder?: PurchaseOrder; error?: string }>(res);
       if (!res.ok) throw new Error(json.error ?? "Failed to save lines");
       const normalizedLines: Line[] = (json.purchaseOrder?.lines ?? []).map((line: Line) => ({
         ...line,
@@ -167,7 +168,7 @@ export default function PurchaseOrderDetailPage() {
           note: receiptForm.note,
         }),
       });
-      const json = await res.json();
+      const json = await readJson<{ purchaseOrder?: PurchaseOrder; error?: string }>(res);
       if (!res.ok) throw new Error(json.error ?? "Failed to add receipt");
       const normalizedLines: Line[] = (json.purchaseOrder?.lines ?? []).map((line: Line) => ({
         ...line,
