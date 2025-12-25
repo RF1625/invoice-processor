@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { VendorManager, RuleManager, GlAccountManager, DimensionManager } from "./forms";
+import { InvoiceApprovalsLoader } from "./invoice-approvals-loader";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { emptyDatabaseSnapshot, type DatabaseSnapshot } from "@/lib/database-cache";
 import { fetchAndCache, readCache } from "@/lib/client-cache";
 import { fetchDatabaseSnapshot } from "@/lib/nav-prefetch";
@@ -79,37 +81,59 @@ export default function DatabasePage() {
           <div className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-600">Loading cached data…</div>
         ) : (
           <>
-            <section className="space-y-3">
-              <div className="flex items-center justify-between">
-                <h2 className="text-lg font-semibold text-slate-900">Vendors</h2>
-                <span className="text-xs text-slate-600">{data.vendors.length} total</span>
-              </div>
-              <VendorManager vendors={data.vendors} />
-            </section>
+            <Accordion
+              type="multiple"
+              defaultValue={["vendors", "gl-accounts", "dimensions", "vendor-rules"]}
+              className="space-y-4"
+            >
+              <AccordionItem value="vendors" className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+                <AccordionTrigger className="px-4 py-3 text-slate-900 hover:no-underline">
+                  <div className="flex w-full items-center justify-between gap-3">
+                    <span className="text-lg font-semibold">Vendors</span>
+                    <span className="text-xs text-slate-600">{data.vendors.length} total</span>
+                  </div>
+                </AccordionTrigger>
+                <AccordionContent className="px-4 pb-4">
+                  <VendorManager vendors={data.vendors} />
+                </AccordionContent>
+              </AccordionItem>
 
-            <section className="space-y-3">
-              <div className="flex items-center justify-between">
-                <h2 className="text-lg font-semibold">G/L Accounts</h2>
-                <span className="text-xs text-slate-600">{data.glAccounts.length} entries</span>
-              </div>
-              <GlAccountManager glAccounts={data.glAccounts} />
-            </section>
+              <AccordionItem value="gl-accounts" className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+                <AccordionTrigger className="px-4 py-3 text-slate-900 hover:no-underline">
+                  <div className="flex w-full items-center justify-between gap-3">
+                    <span className="text-lg font-semibold">G/L Accounts</span>
+                    <span className="text-xs text-slate-600">{data.glAccounts.length} entries</span>
+                  </div>
+                </AccordionTrigger>
+                <AccordionContent className="px-4 pb-4">
+                  <GlAccountManager glAccounts={data.glAccounts} />
+                </AccordionContent>
+              </AccordionItem>
 
-            <section className="space-y-3">
-              <div className="flex items-center justify-between">
-                <h2 className="text-lg font-semibold">Dimensions</h2>
-                <span className="text-xs text-slate-600">{data.dimensions.length} values</span>
-              </div>
-              <DimensionManager dimensions={data.dimensions} />
-            </section>
+              <AccordionItem value="dimensions" className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+                <AccordionTrigger className="px-4 py-3 text-slate-900 hover:no-underline">
+                  <div className="flex w-full items-center justify-between gap-3">
+                    <span className="text-lg font-semibold">Dimensions</span>
+                    <span className="text-xs text-slate-600">{data.dimensions.length} values</span>
+                  </div>
+                </AccordionTrigger>
+                <AccordionContent className="px-4 pb-4">
+                  <DimensionManager dimensions={data.dimensions} />
+                </AccordionContent>
+              </AccordionItem>
 
-            <section className="space-y-3">
-              <div className="flex items-center justify-between">
-                <h2 className="text-lg font-semibold">Vendor rules</h2>
-                <span className="text-xs text-slate-600">{data.rules.length} rules</span>
-              </div>
-              <RuleManager vendors={data.vendors} glAccounts={data.glAccounts} rules={data.rules} />
-            </section>
+              <AccordionItem value="vendor-rules" className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+                <AccordionTrigger className="px-4 py-3 text-slate-900 hover:no-underline">
+                  <div className="flex w-full items-center justify-between gap-3">
+                    <span className="text-lg font-semibold">Vendor rules</span>
+                    <span className="text-xs text-slate-600">{data.rules.length} rules</span>
+                  </div>
+                </AccordionTrigger>
+                <AccordionContent className="px-4 pb-4">
+                  <RuleManager vendors={data.vendors} glAccounts={data.glAccounts} rules={data.rules} />
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
 
             <section className="rounded-xl bg-white p-4 ring-1 ring-slate-200">
               <div className="flex items-center justify-between">
@@ -150,6 +174,8 @@ export default function DatabasePage() {
                 </table>
               </div>
             </section>
+
+            <InvoiceApprovalsLoader />
 
           </>
         )}

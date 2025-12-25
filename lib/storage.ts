@@ -8,17 +8,37 @@ const DEFAULT_STORAGE_ROOT = process.env.VERCEL
   ? "/tmp/invoice-processor"
   : path.join(process.cwd(), "storage");
 const STORAGE_ROOT = process.env.STORAGE_ROOT ?? DEFAULT_STORAGE_ROOT;
-const SUPABASE_URL = process.env.SUPABASE_URL ?? "";
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
+const sanitizeEnvValue = (value: string) => value.trim().replace(/^["']|["']$/g, "");
+const looksLikeJwt = (value: string) => {
+  const parts = value.split(".");
+  return parts.length === 3 && parts.every(Boolean);
+};
+
+const SUPABASE_URL = sanitizeEnvValue(process.env.SUPABASE_URL ?? "");
+const SUPABASE_SERVICE_ROLE_KEY = sanitizeEnvValue(process.env.SUPABASE_SERVICE_ROLE_KEY ?? "");
+const SUPABASE_ANON_KEY = sanitizeEnvValue(process.env.SUPABASE_ANON_KEY ?? "");
 const STORAGE_BUCKET = process.env.SUPABASE_STORAGE_BUCKET ?? "invoices";
-const USE_SUPABASE_STORAGE = Boolean(SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY);
+const SUPABASE_KEY = looksLikeJwt(SUPABASE_SERVICE_ROLE_KEY)
+  ? SUPABASE_SERVICE_ROLE_KEY
+  : looksLikeJwt(SUPABASE_ANON_KEY)
+    ? SUPABASE_ANON_KEY
+    : "";
+const SUPABASE_CONFIG_ERROR = SUPABASE_URL
+  ? SUPABASE_KEY
+    ? null
+    : "Supabase storage key is invalid. Set SUPABASE_SERVICE_ROLE_KEY to the service_role API key (JWT)."
+  : null;
+const USE_SUPABASE_STORAGE = Boolean(SUPABASE_URL);
 
 const globalForSupabase = globalThis as unknown as { supabaseStorageClient?: SupabaseClient };
 
 const getSupabaseClient = () => {
   if (!USE_SUPABASE_STORAGE) return null;
+  if (SUPABASE_CONFIG_ERROR) {
+    throw new Error(SUPABASE_CONFIG_ERROR);
+  }
   if (!globalForSupabase.supabaseStorageClient) {
-    globalForSupabase.supabaseStorageClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+    globalForSupabase.supabaseStorageClient = createClient(SUPABASE_URL, SUPABASE_KEY, {
       auth: { autoRefreshToken: false, persistSession: false },
     });
   }

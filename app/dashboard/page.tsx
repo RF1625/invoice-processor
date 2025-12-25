@@ -1,10 +1,19 @@
-"use client"
-
 import Link from "next/link"
 import { Mail, Upload } from "lucide-react"
 import { InvoiceReviewList } from "@/app/dashboard/components/InvoiceReviewList"
+import { getPendingInvoices } from "@/app/dashboard/data"
+import type { InvoiceInput } from "@/app/dashboard/types"
 
-export default function DashboardPage() {
+export default async function DashboardPage() {
+  let initialInvoices: InvoiceInput[] = []
+  let initialError: string | null = null
+
+  try {
+    initialInvoices = await getPendingInvoices()
+  } catch (err) {
+    initialError = err instanceof Error ? err.message : "Failed to load invoices"
+  }
+
   return (
     <main className="min-h-screen bg-slate-50/50 p-8 text-slate-900">
       <div className="mx-auto flex max-w-5xl flex-col gap-10">
@@ -33,7 +42,7 @@ export default function DashboardPage() {
           </div>
         </header>
 
-        <InvoiceReviewList />
+        <InvoiceReviewList initialInvoices={initialInvoices} initialError={initialError} />
       </div>
     </main>
   )

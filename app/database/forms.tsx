@@ -379,6 +379,7 @@ export function InvoiceApprovalPanel({ invoices }: { invoices: InvoiceInput[] })
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [visibleInvoices, setVisibleInvoices] = useState<InvoiceInput[]>(invoices);
   const [approverOptions, setApproverOptions] = useState<{ id: string; label: string; active: boolean }[]>([]);
   const [approverOverrides, setApproverOverrides] = useState<Record<string, string | null>>({});
   const [approverLoading, setApproverLoading] = useState(true);
@@ -387,6 +388,10 @@ export function InvoiceApprovalPanel({ invoices }: { invoices: InvoiceInput[] })
   const [expandedIds, setExpandedIds] = useState<Record<string, boolean>>({});
   const [invoiceOverrides, setInvoiceOverrides] = useState<Record<string, { invoiceNo?: string | null; currencyCode?: string | null; totalAmount?: number }>>({});
   const { confirm: requestConfirm, dialog } = useConfirmDialog();
+
+  useEffect(() => {
+    setVisibleInvoices(invoices);
+  }, [invoices]);
 
   useEffect(() => {
     const next: Record<string, string | null> = {};
@@ -718,6 +723,7 @@ export function InvoiceApprovalPanel({ invoices }: { invoices: InvoiceInput[] })
         setError("Invoice deleted, but PDF removal from storage failed.");
       }
       dropInvoiceState(invoiceId);
+      setVisibleInvoices((current) => current.filter((inv) => inv.id !== invoiceId));
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to delete invoice");
@@ -738,18 +744,18 @@ export function InvoiceApprovalPanel({ invoices }: { invoices: InvoiceInput[] })
           {error && <div className="text-xs text-red-600">{error}</div>}
         </div>
         <div className="mt-3 overflow-x-auto rounded-lg border border-slate-100">
-          <div className="min-w-[960px]">
-            <div className="grid grid-cols-7 bg-slate-50 px-3 py-2 text-xs font-semibold uppercase text-slate-600">
-              <span>Invoice #</span>
-              <span>Vendor</span>
-              <span>Approver</span>
+            <div className="min-w-[960px]">
+              <div className="grid grid-cols-7 bg-slate-50 px-3 py-2 text-xs font-semibold uppercase text-slate-600">
+                <span>Invoice #</span>
+                <span>Vendor</span>
+                <span>Approver</span>
               <span>Status</span>
               <span className="text-right">Total</span>
               <span>Last approval</span>
               <span className="text-right">Actions</span>
-            </div>
-            <ul className="divide-y divide-slate-100 text-sm">
-              {invoices.map((inv) => {
+              </div>
+              <ul className="divide-y divide-slate-100 text-sm">
+              {visibleInvoices.map((inv) => {
             const lastApproval = inv.approvals[0];
             const assignedApproverId = approverOverrides[inv.id] ?? inv.approvalApprover?.id ?? null;
             const selectValue = assignedApproverId ?? "__auto__";
@@ -1051,7 +1057,7 @@ export function InvoiceApprovalPanel({ invoices }: { invoices: InvoiceInput[] })
               </li>
             );
               })}
-              {invoices.length === 0 && <li className="px-3 py-3 text-slate-600">No invoices yet.</li>}
+              {visibleInvoices.length === 0 && <li className="px-3 py-3 text-slate-600">No invoices yet.</li>}
             </ul>
           </div>
         </div>

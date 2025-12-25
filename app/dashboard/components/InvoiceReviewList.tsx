@@ -5,35 +5,18 @@ import { Check, X, Loader2, AlertCircle, FileText, ChevronDown, ChevronUp, Downl
 import { Button } from "@/components/ui/button"
 import { useRouter } from "next/navigation"
 import { readJson } from "@/lib/http"
+import type { InvoiceInput } from "@/app/dashboard/types"
 
-type InvoiceApprovalInput = {
-    id: string
-    status: string
-    comment?: string | null
-    actedAt?: string | null
-    createdAt: string
+type InvoiceReviewListProps = {
+    initialInvoices: InvoiceInput[]
+    initialError?: string | null
 }
 
-type InvoiceInput = {
-    id: string
-    invoiceNo?: string | null
-    vendorName?: string | null
-    status: string
-    currencyCode?: string | null
-    totalAmount: number
-    taxAmount: number
-    netAmount: number
-    invoiceDate?: string | null
-    dueDate?: string | null
-    approvals: InvoiceApprovalInput[]
-    approvalApprover?: { id: string; name: string | null; email: string } | null
-}
-
-export function InvoiceReviewList() {
+export function InvoiceReviewList({ initialInvoices, initialError = null }: InvoiceReviewListProps) {
     const router = useRouter()
-    const [loading, setLoading] = useState(true)
-    const [error, setError] = useState<string | null>(null)
-    const [invoices, setInvoices] = useState<InvoiceInput[]>([])
+    const [loading, setLoading] = useState(false)
+    const [error, setError] = useState<string | null>(initialError)
+    const [invoices, setInvoices] = useState<InvoiceInput[]>(initialInvoices)
     const [actioningId, setActioningId] = useState<string | null>(null)
     const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
 
@@ -81,8 +64,15 @@ export function InvoiceReviewList() {
     }
 
     useEffect(() => {
-        void fetchInvoices()
-    }, [])
+        setInvoices(initialInvoices)
+        setError(initialError)
+        setExpandedIds((current) => {
+            if (current.size === 0) return current
+            const ids = new Set(initialInvoices.map((inv) => inv.id))
+            const next = new Set([...current].filter((id) => ids.has(id)))
+            return next
+        })
+    }, [initialInvoices, initialError])
 
     const toggleExpand = (id: string) => {
         setExpandedIds(current => {
