@@ -5,6 +5,14 @@ const fs = require("fs");
 const path = require("path");
 
 const env = { ...process.env };
+const nodeMajor = Number(process.versions.node.split(".")[0]);
+const requireModuleFlag = "--experimental-require-module";
+if (nodeMajor >= 22) {
+  const nodeOptions = env.NODE_OPTIONS ? env.NODE_OPTIONS.split(" ") : [];
+  if (!nodeOptions.includes(requireModuleFlag)) {
+    env.NODE_OPTIONS = env.NODE_OPTIONS ? `${env.NODE_OPTIONS} ${requireModuleFlag}` : requireModuleFlag;
+  }
+}
 
 const loadEnvFile = (file) => {
   const fullPath = path.join(process.cwd(), file);

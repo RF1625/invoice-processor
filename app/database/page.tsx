@@ -1,9 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { VendorManager, RuleManager, GlAccountManager, DimensionManager, InvoiceApprovalPanel } from "./forms";
+import { VendorManager, RuleManager, GlAccountManager, DimensionManager } from "./forms";
 import { emptyDatabaseSnapshot, type DatabaseSnapshot } from "@/lib/database-cache";
 import { fetchAndCache, readCache } from "@/lib/client-cache";
 import { fetchDatabaseSnapshot } from "@/lib/nav-prefetch";
@@ -16,7 +15,7 @@ export default function DatabasePage() {
   const [data, setData] = useState<DatabaseSnapshot>(emptyDatabaseSnapshot);
   const [isReady, setIsReady] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<number | null>(null);
-  const [isRefreshing, startTransition] = useTransition();
+  const [, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const shouldRefresh = useMemo(
     () => lastUpdated == null || Date.now() - lastUpdated > CACHE_TTL_MS,
@@ -63,27 +62,10 @@ export default function DatabasePage() {
   return (
     <main className="min-h-screen bg-white p-8 text-slate-900">
       <div className="mx-auto max-w-7xl space-y-8">
-        <header className="flex items-center justify-between">
+        <header className="flex items-center">
           <div>
             <p className="text-xs uppercase tracking-wide text-slate-500">Master data (Supabase/Postgres)</p>
             <h1 className="text-2xl font-semibold">Vendors, G/L accounts & rules</h1>
-          </div>
-          <div className="flex items-center gap-3">
-            {isRefreshing && <span className="text-xs text-slate-500">Refreshing…</span>}
-            <button
-              type="button"
-              onClick={refreshData}
-              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-70"
-              disabled={isRefreshing}
-            >
-              Refresh
-            </button>
-            <Link
-              href="/"
-              className="rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50"
-            >
-              Back to app
-            </Link>
           </div>
         </header>
 
@@ -169,7 +151,6 @@ export default function DatabasePage() {
               </div>
             </section>
 
-            <InvoiceApprovalPanel invoices={data.invoices} />
           </>
         )}
       </div>

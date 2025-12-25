@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ApprovalsClient } from "./ui";
+import { Button } from "@/components/ui/button";
 import { type ApprovalSettingsCache, type ApprovalUserRow } from "@/lib/approvals-cache";
 import { fetchAndCache, readCache, writeCache } from "@/lib/client-cache";
 import { fetchApprovalSettings } from "@/lib/nav-prefetch";
@@ -111,9 +112,9 @@ export default function ApprovalSettingsPage() {
         {error && (
           <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
             {error}{" "}
-            <button type="button" onClick={refreshData} className="font-semibold underline">
+            <Button type="button" variant="link" className="h-auto p-0 font-semibold" onClick={refreshData}>
               Retry
-            </button>
+            </Button>
           </div>
         )}
 

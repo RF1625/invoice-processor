@@ -2,6 +2,9 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DatePicker } from "@/components/ui/date-picker";
@@ -165,19 +168,14 @@ export function ApprovalsClient({
                     {u.email} · <span className="capitalize">{u.role}</span>
                   </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => save(u.userId)}
-                  disabled={!dirty || isSaving}
-                  className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-                >
+                <Button type="button" onClick={() => save(u.userId)} disabled={!dirty || isSaving}>
                   {isSaving ? "Saving…" : dirty ? "Save changes" : "Saved"}
-                </button>
+                </Button>
               </div>
 
               <div className="mt-4 grid gap-4 md:grid-cols-12">
                 <div className="md:col-span-5">
-                  <label className="text-xs font-semibold text-slate-600">Approver</label>
+                  <Label className="text-xs font-semibold text-slate-600">Approver</Label>
                   <div className="mt-1">
                     <Select
                       value={current.approverUserId ?? "__none__"}
@@ -200,19 +198,19 @@ export function ApprovalsClient({
                 </div>
 
                 <div className="md:col-span-2">
-                  <label className="text-xs font-semibold text-slate-600">Limit</label>
-                  <input
+                  <Label className="text-xs font-semibold text-slate-600">Limit</Label>
+                  <Input
                     inputMode="decimal"
                     value={current.approvalLimit ?? ""}
                     placeholder="Unlimited"
                     onChange={(e) => updateDraft(u.userId, { approvalLimit: e.target.value || null })}
-                    className={`mt-1 w-full rounded-lg px-3 py-2 text-sm ${fieldClass}`}
+                    className={`mt-1 ${fieldClass}`}
                   />
                   <p className="mt-1 text-xs text-slate-500">Blank means unlimited.</p>
                 </div>
 
                 <div className="md:col-span-5">
-                  <label className="text-xs font-semibold text-slate-600">Substitute approver</label>
+                  <Label className="text-xs font-semibold text-slate-600">Substitute approver</Label>
                   <div className="mt-1">
                     <Select
                       value={current.substituteUserId ?? "__none__"}
@@ -233,7 +231,7 @@ export function ApprovalsClient({
                   </div>
                   <div className="mt-2 grid grid-cols-2 gap-3">
                     <div>
-                      <label className="text-xs font-semibold text-slate-600">From</label>
+                      <Label className="text-xs font-semibold text-slate-600">From</Label>
                       <div className="mt-1">
                         <DatePicker
                           value={current.substituteFrom}
@@ -244,7 +242,7 @@ export function ApprovalsClient({
                       </div>
                     </div>
                     <div>
-                      <label className="text-xs font-semibold text-slate-600">To</label>
+                      <Label className="text-xs font-semibold text-slate-600">To</Label>
                       <div className="mt-1">
                         <DatePicker
                           value={current.substituteTo}

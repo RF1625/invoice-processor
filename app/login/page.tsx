@@ -3,6 +3,9 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 export default function LoginPage() {
   return (
@@ -56,39 +59,33 @@ function LoginContent() {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <label className="block space-y-1 text-sm font-medium text-slate-700">
-            <span>Email</span>
-            <input
+          <div className="space-y-1">
+            <Label>Email</Label>
+            <Input
               type="email"
               autoComplete="email"
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-slate-400 focus:outline-none"
             />
-          </label>
+          </div>
 
-          <label className="block space-y-1 text-sm font-medium text-slate-700">
-            <span>Password</span>
-            <input
+          <div className="space-y-1">
+            <Label>Password</Label>
+            <Input
               type="password"
               autoComplete="current-password"
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-slate-400 focus:outline-none"
             />
-          </label>
+          </div>
 
           {error && <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>}
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="inline-flex w-full items-center justify-center rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-md transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
-          >
+          <Button type="submit" disabled={loading} className="w-full">
             {loading ? "Logging in…" : "Login"}
-          </button>
+          </Button>
         </form>
 
         <div className="flex items-center justify-between text-sm text-slate-700">

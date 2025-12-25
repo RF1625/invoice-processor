@@ -4,6 +4,11 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { ArrowLeft, Loader2, Save, CheckCircle2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { DatePicker } from "@/components/ui/date-picker";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const currency = (value?: number | string | null, code?: string | null) => {
   const num = typeof value === "string" ? Number(value) : value ?? 0;
@@ -229,54 +234,49 @@ export default function PurchaseOrderDetailPage() {
                   <h2 className="text-lg font-semibold text-slate-900">Lines</h2>
                   <p className="text-sm text-slate-600">Edit line quantities, costs, and G/L assignment.</p>
                 </div>
-                <button
-                  type="button"
-                  onClick={saveLines}
-                  disabled={savingLines}
-                  className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 disabled:cursor-not-allowed"
-                >
+                <Button type="button" onClick={saveLines} disabled={savingLines} className="gap-2">
                   {savingLines ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                   Save lines
-                </button>
+                </Button>
               </div>
               <div className="divide-y divide-slate-100">
                 {lines.map((line) => (
                   <div key={line.id} className="grid grid-cols-8 gap-2 px-4 py-3 text-xs">
-                    <input
+                    <Input
                       value={line.description ?? ""}
                       onChange={(e) => updateLine(line.id, { description: e.target.value })}
                       className="col-span-2 rounded-lg border border-slate-200 px-2 py-1"
                       placeholder="Description"
                     />
-                    <input
+                    <Input
                       type="number"
                       value={line.quantity}
                       onChange={(e) => updateLine(line.id, { quantity: Number(e.target.value) })}
                       className="rounded-lg border border-slate-200 px-2 py-1"
                       placeholder="Qty"
                     />
-                    <input
+                    <Input
                       type="number"
                       value={line.unitCost}
                       onChange={(e) => updateLine(line.id, { unitCost: Number(e.target.value) })}
                       className="rounded-lg border border-slate-200 px-2 py-1"
                       placeholder="Unit cost"
                     />
-                    <input
+                    <Input
                       type="number"
                       value={line.receivedQuantity}
                       onChange={(e) => updateLine(line.id, { receivedQuantity: Number(e.target.value) })}
                       className="rounded-lg border border-slate-200 px-2 py-1"
                       placeholder="Received"
                     />
-                    <input
+                    <Input
                       type="number"
                       value={line.invoicedQuantity}
                       onChange={(e) => updateLine(line.id, { invoicedQuantity: Number(e.target.value) })}
                       className="rounded-lg border border-slate-200 px-2 py-1"
                       placeholder="Invoiced"
                     />
-                    <input
+                    <Input
                       value={line.glAccountNo ?? ""}
                       onChange={(e) => updateLine(line.id, { glAccountNo: e.target.value })}
                       className="rounded-lg border border-slate-200 px-2 py-1"
@@ -327,58 +327,52 @@ export default function PurchaseOrderDetailPage() {
                 <p className="text-sm text-slate-600">Update quantities received.</p>
               </div>
               <div className="space-y-3 px-4 py-3 text-sm">
-                <label className="space-y-1">
-                  <span className="text-xs font-semibold text-slate-700">Line</span>
-                  <select
+                <div className="space-y-1">
+                  <Label className="text-xs font-semibold text-slate-700">Line</Label>
+                  <Select
                     value={receiptForm.purchaseOrderLineId}
-                    onChange={(e) => setReceiptForm({ ...receiptForm, purchaseOrderLineId: e.target.value })}
-                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-slate-400 focus:outline-none"
+                    onValueChange={(value) => setReceiptForm({ ...receiptForm, purchaseOrderLineId: value })}
                   >
-                    <option value="">Select line</option>
-                    {lines.map((line) => (
-                      <option key={line.id} value={line.id}>
-                        Line {line.lineNo} · {line.description ?? "(no desc)"}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="space-y-1">
-                  <span className="text-xs font-semibold text-slate-700">Quantity</span>
-                  <input
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select line" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {lines.map((line) => (
+                        <SelectItem key={line.id} value={line.id}>
+                          Line {line.lineNo} · {line.description ?? "(no desc)"}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs font-semibold text-slate-700">Quantity</Label>
+                  <Input
                     type="number"
                     value={receiptForm.quantity}
                     onChange={(e) => setReceiptForm({ ...receiptForm, quantity: Number(e.target.value) })}
-                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-slate-400 focus:outline-none"
                     placeholder="e.g. 10"
                   />
-                </label>
-                <label className="space-y-1">
-                  <span className="text-xs font-semibold text-slate-700">Receipt date</span>
-                  <input
-                    type="date"
-                    value={receiptForm.receiptDate}
-                    onChange={(e) => setReceiptForm({ ...receiptForm, receiptDate: e.target.value })}
-                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-slate-400 focus:outline-none"
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs font-semibold text-slate-700">Receipt date</Label>
+                  <DatePicker
+                    value={receiptForm.receiptDate || null}
+                    onChange={(next) => setReceiptForm({ ...receiptForm, receiptDate: next ?? "" })}
                   />
-                </label>
-                <label className="space-y-1">
-                  <span className="text-xs font-semibold text-slate-700">Note</span>
-                  <input
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs font-semibold text-slate-700">Note</Label>
+                  <Input
                     value={receiptForm.note}
                     onChange={(e) => setReceiptForm({ ...receiptForm, note: e.target.value })}
-                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-slate-400 focus:outline-none"
                     placeholder="Optional"
                   />
-                </label>
-                <button
-                  type="button"
-                  onClick={addReceipt}
-                  disabled={savingReceipt}
-                  className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 disabled:cursor-not-allowed"
-                >
+                </div>
+                <Button type="button" onClick={addReceipt} disabled={savingReceipt} className="w-full gap-2">
                   {savingReceipt ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
                   Log receipt
-                </button>
+                </Button>
               </div>
             </div>
 

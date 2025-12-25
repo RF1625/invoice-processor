@@ -2,7 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { DatePicker } from "@/components/ui/date-picker";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import type { DimensionInput, GlAccountInput, InvoiceInput, RuleInput, VendorInput } from "@/lib/database-cache";
 import type { MatchType } from "@prisma/client";
 
@@ -31,6 +37,148 @@ const statusBadge = (status: string) => {
   }
 };
 
+type ConfirmDialogOptions = {
+  title?: string;
+  message: string;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  destructive?: boolean;
+};
+
+type ConfirmDialogState = ConfirmDialogOptions & { resolve: (confirmed: boolean) => void };
+
+const useConfirmDialog = () => {
+  const [state, setState] = useState<ConfirmDialogState | null>(null);
+
+  const confirm = (options: ConfirmDialogOptions) =>
+    new Promise<boolean>((resolve) => {
+      setState({ ...options, resolve });
+    });
+
+  const closeDialog = (confirmed: boolean) => {
+    setState((current) => {
+      if (current) current.resolve(confirmed);
+      return null;
+    });
+  };
+
+  const dialog = state ? (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
+      <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
+        <div className="text-lg font-semibold text-slate-900">{state.title ?? "Confirm delete"}</div>
+        <p className="mt-2 text-sm text-slate-600">{state.message}</p>
+        <div className="mt-6 flex items-center justify-end gap-2">
+          <Button type="button" variant="outline" size="sm" onClick={() => closeDialog(false)}>
+            {state.cancelLabel ?? "Cancel"}
+          </Button>
+          <Button
+            type="button"
+            variant={state.destructive ? "destructive" : "default"}
+            size="sm"
+            onClick={() => closeDialog(true)}
+          >
+            {state.confirmLabel ?? "Confirm"}
+          </Button>
+        </div>
+      </div>
+    </div>
+  ) : null;
+
+  return { confirm, dialog };
+};
+
+type InvoiceEditForm = {
+  invoiceNo: string;
+  invoiceDate: string;
+  dueDate: string;
+  currencyCode: string;
+  totalAmount: string;
+  taxAmount: string;
+  netAmount: string;
+  vendorName: string;
+  vendorAddress: string;
+  customerName: string;
+  customerAddress: string;
+  gstNumber: string;
+  paymentTerms: string;
+  bankAccount: string;
+};
+
+type InvoiceDetailsState = {
+  loading: boolean;
+  error: string | null;
+  invoice?: any;
+  form?: InvoiceEditForm;
+  saving: boolean;
+  saveError: string | null;
+  saveSuccess: string | null;
+  fileStatus: "unknown" | "ready" | "missing";
+};
+
+const asRecord = (value: unknown) =>
+  value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, any>) : null;
+
+const toDateInput = (value: unknown) => {
+  if (!value) return "";
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) return "";
+    return trimmed.includes("T") ? trimmed.split("T")[0] : trimmed.slice(0, 10);
+  }
+  if (value instanceof Date) return value.toISOString().slice(0, 10);
+  return "";
+};
+
+const toNumber = (value: unknown) => {
+  if (value == null) return null;
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim() && Number.isFinite(Number(value))) return Number(value);
+  return null;
+};
+
+const formatAmount = (value: unknown) => {
+  const num = toNumber(value);
+  return num == null ? "" : num.toFixed(2);
+};
+
+const pickPayloadValue = (canonical: Record<string, any> | null, original: Record<string, any> | null, keys: string[]) => {
+  for (const key of keys) {
+    const value = canonical?.[key];
+    if (value != null && value !== "") return String(value);
+  }
+  for (const key of keys) {
+    const value = original?.[key];
+    if (value != null && value !== "") return String(value);
+  }
+  return "";
+};
+
+const buildInvoiceEditForm = (invoice: any): InvoiceEditForm => {
+  const canonical = asRecord(invoice?.canonicalJson);
+  const original = asRecord(invoice?.originalPayload);
+  const fallbackInvoiceNo = pickPayloadValue(canonical, original, ["invoiceId", "invoice_id"]);
+  const fallbackInvoiceDate = pickPayloadValue(canonical, original, ["invoiceDate", "invoice_date"]);
+  const fallbackDueDate = pickPayloadValue(canonical, original, ["dueDate"]);
+  const fallbackCurrency = pickPayloadValue(canonical, original, ["currencyCode", "currency"]);
+
+  return {
+    invoiceNo: invoice?.invoiceNo ?? fallbackInvoiceNo ?? "",
+    invoiceDate: toDateInput(invoice?.invoiceDate ?? fallbackInvoiceDate),
+    dueDate: toDateInput(invoice?.dueDate ?? fallbackDueDate),
+    currencyCode: invoice?.currencyCode ?? fallbackCurrency ?? "",
+    totalAmount: formatAmount(invoice?.totalAmount),
+    taxAmount: formatAmount(invoice?.taxAmount),
+    netAmount: formatAmount(invoice?.netAmount),
+    vendorName: pickPayloadValue(canonical, original, ["vendorName"]),
+    vendorAddress: pickPayloadValue(canonical, original, ["vendorAddress"]),
+    customerName: pickPayloadValue(canonical, original, ["customerName"]),
+    customerAddress: pickPayloadValue(canonical, original, ["customerAddress"]),
+    gstNumber: pickPayloadValue(canonical, original, ["gstNumber"]),
+    paymentTerms: pickPayloadValue(canonical, original, ["paymentTerms"]),
+    bankAccount: pickPayloadValue(canonical, original, ["bankAccount"]),
+  };
+};
+
 export function VendorManager({ vendors }: { vendors: VendorInput[] }) {
   const router = useRouter();
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -41,6 +189,7 @@ export function VendorManager({ vendors }: { vendors: VendorInput[] }) {
   const [defaultDimensions, setDefaultDimensions] = useState("");
   const [active, setActive] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { confirm: requestConfirm, dialog } = useConfirmDialog();
 
   const resetForm = () => {
     setEditingId(null);
@@ -90,7 +239,13 @@ export function VendorManager({ vendors }: { vendors: VendorInput[] }) {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Delete this vendor? This will also remove its rules.")) return;
+    const confirmed = await requestConfirm({
+      title: "Delete vendor",
+      message: "Delete this vendor? This will also remove its rules.",
+      confirmLabel: "Delete vendor",
+      destructive: true,
+    });
+    if (!confirmed) return;
     try {
       const res = await fetch(`/api/vendors/${id}`, { method: "DELETE" });
       if (!res.ok) throw new Error("Failed to delete vendor");
@@ -102,132 +257,136 @@ export function VendorManager({ vendors }: { vendors: VendorInput[] }) {
   };
 
   return (
-    <div className="grid gap-4 lg:grid-cols-3">
-      <div className="lg:col-span-2 overflow-hidden rounded-xl border border-slate-200 bg-white">
-        <div className="grid grid-cols-6 bg-slate-50 px-3 py-2 text-xs font-semibold uppercase text-slate-600">
-          <span>Vendor #</span>
-          <span className="col-span-2">Name</span>
-          <span>GST</span>
-          <span>Currency</span>
-          <span className="text-right">Active</span>
+    <>
+      {dialog}
+      <div className="grid gap-4 lg:grid-cols-3">
+        <div className="lg:col-span-2 space-y-3">
+          <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+            <div className="grid grid-cols-6 bg-slate-50 px-3 py-2 text-xs font-semibold uppercase text-slate-600">
+              <span>Vendor #</span>
+              <span className="col-span-2">Name</span>
+              <span>GST</span>
+              <span>Currency</span>
+              <span className="text-right">Active</span>
+            </div>
+            <ul className="divide-y divide-slate-100 text-sm">
+              {vendors.map((v) => (
+                <li key={v.id} className="grid grid-cols-6 items-center px-3 py-3">
+                  <div className="font-mono text-slate-800">{v.vendorNo}</div>
+                  <div className="col-span-2">
+                    <div className="font-semibold text-slate-900">{v.name}</div>
+                    <div className="text-xs text-slate-600">Default dims: {formatDims(v.defaultDimensions ?? {})}</div>
+                  </div>
+                  <div className="text-slate-700">{v.gstNumber ?? "—"}</div>
+                  <div className="text-slate-700">{v.defaultCurrency ?? "—"}</div>
+                  <div className="text-right text-slate-700">
+                    {v.active ? (
+                      <span className="rounded-full bg-green-50 px-2 py-1 text-xs font-semibold text-green-700 ring-1 ring-green-200">
+                        Active
+                      </span>
+                    ) : (
+                      <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200">
+                        Inactive
+                      </span>
+                    )}
+                  </div>
+                  <div className="col-span-6 mt-2 flex gap-2 text-xs">
+                    <Button
+                      variant="link"
+                      size="sm"
+                      className="h-auto p-0 text-slate-700"
+                      onClick={() => handleEdit(v)}
+                    >
+                      Edit
+                    </Button>
+                    <Button
+                      variant="link"
+                      size="sm"
+                      className="h-auto p-0 text-red-600"
+                      onClick={() => handleDelete(v.id)}
+                    >
+                      Delete
+                    </Button>
+                  </div>
+                </li>
+              ))}
+              {vendors.length === 0 && <li className="px-3 py-3 text-slate-600">No vendors yet.</li>}
+            </ul>
+          </div>
         </div>
-        <ul className="divide-y divide-slate-100 text-sm">
-          {vendors.map((v) => (
-            <li key={v.id} className="grid grid-cols-6 items-center px-3 py-3">
-              <div className="font-mono text-slate-800">{v.vendorNo}</div>
-              <div className="col-span-2">
-                <div className="font-semibold text-slate-900">{v.name}</div>
-                <div className="text-xs text-slate-600">Default dims: {formatDims(v.defaultDimensions ?? {})}</div>
-              </div>
-              <div className="text-slate-700">{v.gstNumber ?? "—"}</div>
-              <div className="text-slate-700">{v.defaultCurrency ?? "—"}</div>
-              <div className="text-right text-slate-700">
-                {v.active ? (
-                  <span className="rounded-full bg-green-50 px-2 py-1 text-xs font-semibold text-green-700 ring-1 ring-green-200">
-                    Active
-                  </span>
-                ) : (
-                  <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200">
-                    Inactive
-                  </span>
-                )}
-              </div>
-              <div className="col-span-6 mt-2 flex gap-2 text-xs">
-                <button className="text-slate-700 underline underline-offset-4" onClick={() => handleEdit(v)}>
-                  Edit
-                </button>
-                <button className="text-red-600 underline underline-offset-4" onClick={() => handleDelete(v.id)}>
-                  Delete
-                </button>
-              </div>
-            </li>
-          ))}
-          {vendors.length === 0 && <li className="px-3 py-3 text-slate-600">No vendors yet.</li>}
-        </ul>
-      </div>
 
-      <form onSubmit={handleSubmit} className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="text-sm font-semibold text-slate-900">{editingId ? "Edit vendor" : "Add vendor"}</div>
-            <p className="text-xs text-slate-600">Maintain vendor master data stored in Supabase</p>
+        <form onSubmit={handleSubmit} className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-sm font-semibold text-slate-900">{editingId ? "Edit vendor" : "Add vendor"}</div>
+              <p className="text-xs text-slate-600">Maintain vendor master data stored in Supabase</p>
+            </div>
+            {editingId && (
+              <Button
+                type="button"
+                variant="link"
+                size="sm"
+                className="h-auto p-0 text-slate-600"
+                onClick={resetForm}
+              >
+                Cancel edit
+              </Button>
+            )}
           </div>
-          {editingId && (
-            <button type="button" className="text-xs text-slate-600 underline underline-offset-4" onClick={resetForm}>
-              Cancel edit
-            </button>
-          )}
-        </div>
-        {error && <p className="text-xs text-red-600">{error}</p>}
-        <div className="space-y-1">
-          <label className="text-xs font-semibold text-slate-600">Vendor #</label>
-          <input
-            required
-            value={vendorNo}
-            onChange={(e) => setVendorNo(e.target.value)}
-            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-          />
-        </div>
-        <div className="space-y-1">
-          <label className="text-xs font-semibold text-slate-600">Name</label>
-          <input
-            required
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-          />
-        </div>
-        <div className="grid grid-cols-2 gap-3">
+          {error && <p className="text-xs text-red-600">{error}</p>}
           <div className="space-y-1">
-            <label className="text-xs font-semibold text-slate-600">GST number</label>
-            <input
-              value={gstNumber}
-              onChange={(e) => setGstNumber(e.target.value)}
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-            />
+            <Label className="text-xs font-semibold text-slate-600">Vendor #</Label>
+            <Input required value={vendorNo} onChange={(e) => setVendorNo(e.target.value)} />
           </div>
           <div className="space-y-1">
-            <label className="text-xs font-semibold text-slate-600">Default currency</label>
-            <input
-              value={defaultCurrency}
-              onChange={(e) => setDefaultCurrency(e.target.value)}
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+            <Label className="text-xs font-semibold text-slate-600">Name</Label>
+            <Input required value={name} onChange={(e) => setName(e.target.value)} />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <Label className="text-xs font-semibold text-slate-600">GST number</Label>
+              <Input value={gstNumber} onChange={(e) => setGstNumber(e.target.value)} />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs font-semibold text-slate-600">Default currency</Label>
+              <Input value={defaultCurrency} onChange={(e) => setDefaultCurrency(e.target.value)} />
+            </div>
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs font-semibold text-slate-600">Default dimensions (JSON)</Label>
+            <Textarea
+              value={defaultDimensions}
+              onChange={(e) => setDefaultDimensions(e.target.value)}
+              rows={3}
+              placeholder='{"DEPARTMENT":"OPS"}'
             />
           </div>
-        </div>
-        <div className="space-y-1">
-          <label className="text-xs font-semibold text-slate-600">Default dimensions (JSON)</label>
-          <textarea
-            value={defaultDimensions}
-            onChange={(e) => setDefaultDimensions(e.target.value)}
-            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-            rows={3}
-            placeholder='{"DEPARTMENT":"OPS"}'
-          />
-        </div>
-        <label className="flex items-center gap-2 text-sm text-slate-700">
-          <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} />
-          Active
-        </label>
-        <button
-          type="submit"
-          className="w-full rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800"
-        >
-          {editingId ? "Update vendor" : "Add vendor"}
-        </button>
-      </form>
-    </div>
+          <label className="flex items-center gap-2 text-sm text-slate-700">
+            <Checkbox checked={active} onCheckedChange={(checked) => setActive(Boolean(checked))} />
+            Active
+          </label>
+          <Button type="submit" className="w-full">
+            {editingId ? "Update vendor" : "Add vendor"}
+          </Button>
+        </form>
+      </div>
+    </>
   );
 }
 
 export function InvoiceApprovalPanel({ invoices }: { invoices: InvoiceInput[] }) {
   const router = useRouter();
   const [loadingId, setLoadingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [approverOptions, setApproverOptions] = useState<{ id: string; label: string; active: boolean }[]>([]);
   const [approverOverrides, setApproverOverrides] = useState<Record<string, string | null>>({});
   const [approverLoading, setApproverLoading] = useState(true);
   const [approverSavingId, setApproverSavingId] = useState<string | null>(null);
+  const [detailsById, setDetailsById] = useState<Record<string, InvoiceDetailsState>>({});
+  const [expandedIds, setExpandedIds] = useState<Record<string, boolean>>({});
+  const [invoiceOverrides, setInvoiceOverrides] = useState<Record<string, { invoiceNo?: string | null; currencyCode?: string | null; totalAmount?: number }>>({});
+  const { confirm: requestConfirm, dialog } = useConfirmDialog();
 
   useEffect(() => {
     const next: Record<string, string | null> = {};
@@ -265,6 +424,224 @@ export function InvoiceApprovalPanel({ invoices }: { invoices: InvoiceInput[] })
       active = false;
     };
   }, []);
+
+  const loadDetails = async (invoiceId: string) => {
+    setDetailsById((current) => ({
+      ...current,
+      [invoiceId]: {
+        ...current[invoiceId],
+        loading: true,
+        error: null,
+        saving: false,
+        saveError: null,
+        saveSuccess: null,
+        fileStatus: current[invoiceId]?.fileStatus ?? "unknown",
+      },
+    }));
+
+    try {
+      const res = await fetch(`/api/invoices/${invoiceId}`, { cache: "no-store" });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json.error ?? "Failed to load invoice");
+      const invoice = json.invoice;
+      const form = buildInvoiceEditForm(invoice);
+      const fileStatus = invoice?.files?.length ? "unknown" : "missing";
+      setDetailsById((current) => ({
+        ...current,
+        [invoiceId]: {
+          loading: false,
+          error: null,
+          invoice,
+          form,
+          saving: false,
+          saveError: null,
+          saveSuccess: null,
+          fileStatus,
+        },
+      }));
+
+      if (invoice?.files?.length) {
+        const headRes = await fetch(`/api/invoices/${invoiceId}/file`, { method: "HEAD" });
+        setDetailsById((current) => {
+          const entry = current[invoiceId];
+          if (!entry) return current;
+          return {
+            ...current,
+            [invoiceId]: {
+              ...entry,
+              fileStatus: headRes.ok ? "ready" : "missing",
+            },
+          };
+        });
+      }
+    } catch (err) {
+      setDetailsById((current) => ({
+        ...current,
+        [invoiceId]: {
+          ...current[invoiceId],
+          loading: false,
+          error: err instanceof Error ? err.message : "Failed to load invoice",
+          saving: false,
+          saveError: null,
+          saveSuccess: null,
+          fileStatus: current[invoiceId]?.fileStatus ?? "missing",
+        },
+      }));
+    }
+  };
+
+  const toggleDetails = (invoiceId: string) => {
+    const isOpen = Boolean(expandedIds[invoiceId]);
+    const nextOpen = !isOpen;
+    setExpandedIds((current) => ({ ...current, [invoiceId]: nextOpen }));
+    if (nextOpen && !detailsById[invoiceId]) {
+      void loadDetails(invoiceId);
+    }
+  };
+
+  const updateDetailForm = (invoiceId: string, updates: Partial<InvoiceEditForm>) => {
+    setDetailsById((current) => {
+      const entry = current[invoiceId];
+      if (!entry?.form) return current;
+      return {
+        ...current,
+        [invoiceId]: {
+          ...entry,
+          form: { ...entry.form, ...updates },
+          saveSuccess: null,
+        },
+      };
+    });
+  };
+
+  const resetDetailsForm = (invoiceId: string) => {
+    setDetailsById((current) => {
+      const entry = current[invoiceId];
+      if (!entry?.invoice) return current;
+      return {
+        ...current,
+        [invoiceId]: {
+          ...entry,
+          form: buildInvoiceEditForm(entry.invoice),
+          saveError: null,
+          saveSuccess: null,
+        },
+      };
+    });
+  };
+
+  const dropInvoiceState = (invoiceId: string) => {
+    setDetailsById((current) => {
+      const { [invoiceId]: _, ...rest } = current;
+      return rest;
+    });
+    setExpandedIds((current) => {
+      const { [invoiceId]: _, ...rest } = current;
+      return rest;
+    });
+    setInvoiceOverrides((current) => {
+      const { [invoiceId]: _, ...rest } = current;
+      return rest;
+    });
+    setApproverOverrides((current) => {
+      const { [invoiceId]: _, ...rest } = current;
+      return rest;
+    });
+  };
+
+  const saveDetails = async (invoiceId: string) => {
+    const entry = detailsById[invoiceId];
+    if (!entry?.form || entry.saving) return;
+    const form = entry.form;
+    const payload = {
+      invoiceNo: form.invoiceNo.trim() || null,
+      invoiceDate: form.invoiceDate.trim() || null,
+      dueDate: form.dueDate.trim() || null,
+      currencyCode: form.currencyCode.trim() || null,
+      totalAmount: form.totalAmount.trim(),
+      taxAmount: form.taxAmount.trim(),
+      netAmount: form.netAmount.trim(),
+      vendorName: form.vendorName.trim() || null,
+      vendorAddress: form.vendorAddress.trim() || null,
+      customerName: form.customerName.trim() || null,
+      customerAddress: form.customerAddress.trim() || null,
+      gstNumber: form.gstNumber.trim() || null,
+      paymentTerms: form.paymentTerms.trim() || null,
+      bankAccount: form.bankAccount.trim() || null,
+    };
+
+    const previousOverride = invoiceOverrides[invoiceId];
+    const optimisticTotal = Number(payload.totalAmount);
+    setInvoiceOverrides((current) => ({
+      ...current,
+      [invoiceId]: {
+        invoiceNo: payload.invoiceNo,
+        currencyCode: payload.currencyCode,
+        totalAmount: Number.isFinite(optimisticTotal) ? optimisticTotal : current[invoiceId]?.totalAmount,
+      },
+    }));
+
+    setDetailsById((current) => ({
+      ...current,
+      [invoiceId]: {
+        ...current[invoiceId],
+        saving: true,
+        saveError: null,
+        saveSuccess: null,
+      },
+    }));
+
+    try {
+      const res = await fetch(`/api/invoices/${invoiceId}/edit`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json.error ?? "Failed to save invoice");
+      const invoice = json.invoice ?? entry.invoice;
+      const nextForm = buildInvoiceEditForm(invoice);
+      setDetailsById((current) => ({
+        ...current,
+        [invoiceId]: {
+          ...current[invoiceId],
+          invoice,
+          form: nextForm,
+          saving: false,
+          saveError: null,
+          saveSuccess: "Saved",
+        },
+      }));
+      setInvoiceOverrides((current) => ({
+        ...current,
+        [invoiceId]: {
+          invoiceNo: invoice?.invoiceNo ?? payload.invoiceNo,
+          currencyCode: invoice?.currencyCode ?? payload.currencyCode,
+          totalAmount: Number.isFinite(Number(invoice?.totalAmount))
+            ? Number(invoice?.totalAmount)
+            : current[invoiceId]?.totalAmount,
+        },
+      }));
+      router.refresh();
+    } catch (err) {
+      setInvoiceOverrides((current) => {
+        if (!previousOverride) {
+          const { [invoiceId]: _, ...rest } = current;
+          return rest;
+        }
+        return { ...current, [invoiceId]: previousOverride };
+      });
+      setDetailsById((current) => ({
+        ...current,
+        [invoiceId]: {
+          ...current[invoiceId],
+          saving: false,
+          saveError: err instanceof Error ? err.message : "Failed to save invoice",
+          saveSuccess: null,
+        },
+      }));
+    }
+  };
 
   const setApproval = async (invoiceId: string, status: "pending" | "approved" | "rejected", comment?: string | null) => {
     setLoadingId(invoiceId);
@@ -323,30 +700,65 @@ export function InvoiceApprovalPanel({ invoices }: { invoices: InvoiceInput[] })
     }
   };
 
+  const deleteInvoice = async (invoiceId: string) => {
+    const confirmed = await requestConfirm({
+      title: "Delete invoice",
+      message: "Delete this invoice and its PDF? This cannot be undone.",
+      confirmLabel: "Delete invoice",
+      destructive: true,
+    });
+    if (!confirmed) return;
+    setDeletingId(invoiceId);
+    setError(null);
+    try {
+      const res = await fetch(`/api/invoices/${invoiceId}`, { method: "DELETE" });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json.error ?? "Failed to delete invoice");
+      if (json.storageDeleted === false) {
+        setError("Invoice deleted, but PDF removal from storage failed.");
+      }
+      dropInvoiceState(invoiceId);
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete invoice");
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
   return (
-    <section className="rounded-xl border border-slate-200 bg-white p-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-lg font-semibold text-slate-900">Invoices & approvals</h2>
-          <p className="text-xs text-slate-600">Track approval state and history per invoice</p>
+    <>
+      {dialog}
+      <section className="rounded-xl border border-slate-200 bg-white p-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-900">Invoices & approvals</h2>
+            <p className="text-xs text-slate-600">Track approval state and history per invoice</p>
+          </div>
+          {error && <div className="text-xs text-red-600">{error}</div>}
         </div>
-        {error && <div className="text-xs text-red-600">{error}</div>}
-      </div>
-      <div className="mt-3 overflow-hidden rounded-lg border border-slate-100">
-        <div className="grid grid-cols-7 bg-slate-50 px-3 py-2 text-xs font-semibold uppercase text-slate-600">
-          <span>Invoice #</span>
-          <span>Vendor</span>
-          <span>Approver</span>
-          <span>Status</span>
-          <span className="text-right">Total</span>
-          <span>Last approval</span>
-          <span className="text-right">Actions</span>
-        </div>
-        <ul className="divide-y divide-slate-100 text-sm">
-          {invoices.map((inv) => {
+        <div className="mt-3 overflow-x-auto rounded-lg border border-slate-100">
+          <div className="min-w-[960px]">
+            <div className="grid grid-cols-7 bg-slate-50 px-3 py-2 text-xs font-semibold uppercase text-slate-600">
+              <span>Invoice #</span>
+              <span>Vendor</span>
+              <span>Approver</span>
+              <span>Status</span>
+              <span className="text-right">Total</span>
+              <span>Last approval</span>
+              <span className="text-right">Actions</span>
+            </div>
+            <ul className="divide-y divide-slate-100 text-sm">
+              {invoices.map((inv) => {
             const lastApproval = inv.approvals[0];
             const assignedApproverId = approverOverrides[inv.id] ?? inv.approvalApprover?.id ?? null;
             const selectValue = assignedApproverId ?? "__auto__";
+            const detail = detailsById[inv.id];
+            const isExpanded = Boolean(expandedIds[inv.id]);
+            const override = invoiceOverrides[inv.id];
+            const invoiceNoLabel = (override?.invoiceNo ?? inv.invoiceNo) || "—";
+            const currencyLabel = override?.currencyCode ?? inv.currencyCode ?? "";
+            const totalValue = override?.totalAmount ?? inv.totalAmount;
             const fallbackApprover =
               inv.approvalApprover && !approverOptions.some((opt) => opt.id === inv.approvalApprover?.id)
                 ? {
@@ -358,7 +770,7 @@ export function InvoiceApprovalPanel({ invoices }: { invoices: InvoiceInput[] })
                 : null;
             return (
               <li key={inv.id} className="grid grid-cols-7 items-center px-3 py-3">
-                <div className="font-mono text-slate-800">{inv.invoiceNo ?? "—"}</div>
+                <div className="font-mono text-slate-800">{invoiceNoLabel}</div>
                 <div className="text-slate-800">{inv.vendorName ?? "—"}</div>
                 <div>
                   <Select
@@ -388,7 +800,7 @@ export function InvoiceApprovalPanel({ invoices }: { invoices: InvoiceInput[] })
                 </div>
                 <div className="flex items-center gap-2">{statusBadge(inv.status)}</div>
                 <div className="text-right font-semibold text-slate-900">
-                  {inv.currencyCode ?? ""} {inv.totalAmount.toFixed(2)}
+                  {currencyLabel} {Number.isFinite(totalValue) ? totalValue.toFixed(2) : "0.00"}
                 </div>
                 <div className="text-xs text-slate-600">
                   {lastApproval ? (
@@ -404,28 +816,224 @@ export function InvoiceApprovalPanel({ invoices }: { invoices: InvoiceInput[] })
                   )}
                 </div>
                 <div className="flex justify-end gap-2 text-xs">
-                  <button
-                    className="rounded-md border border-slate-200 px-3 py-1 text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                  <Button
+                    variant="outline"
+                    size="sm"
                     onClick={() => handleRequest(inv.id)}
                     disabled={loadingId === inv.id}
                   >
                     Request
-                  </button>
-                  <button
-                    className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-1 font-semibold text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
                     onClick={() => handleApprove(inv.id)}
                     disabled={loadingId === inv.id || inv.status === "approved"}
                   >
                     Approve
-                  </button>
-                  <button
-                    className="rounded-md border border-red-200 bg-red-50 px-3 py-1 font-semibold text-red-700 hover:bg-red-100 disabled:opacity-50"
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="border-red-200 bg-red-50 text-red-700 hover:bg-red-100"
                     onClick={() => handleReject(inv.id)}
                     disabled={loadingId === inv.id || inv.status === "rejected"}
                   >
                     Reject
-                  </button>
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="border-red-200 text-red-700 hover:bg-red-50"
+                    onClick={() => deleteInvoice(inv.id)}
+                    disabled={deletingId === inv.id}
+                  >
+                    {deletingId === inv.id ? "Deleting..." : "Delete"}
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => toggleDetails(inv.id)}>
+                    {isExpanded ? "Hide" : "Details"}
+                  </Button>
                 </div>
+                {isExpanded && (
+                  <div className="col-span-7 mt-3 rounded-lg border border-slate-200 bg-white p-3">
+                    {!detail || detail.loading ? (
+                      <div className="flex items-center gap-2 text-xs text-slate-500">
+                        <div className="h-4 w-4 animate-spin rounded-full border-2 border-slate-200 border-t-slate-600" />
+                        Loading invoice details...
+                      </div>
+                    ) : detail?.error ? (
+                      <div className="text-xs text-red-600">{detail.error}</div>
+                    ) : detail?.form ? (
+                      <div className="grid gap-4 lg:grid-cols-2">
+                        <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                          <div className="text-xs font-semibold uppercase text-slate-500">Invoice PDF</div>
+                          <div className="mt-2">
+                            {detail.fileStatus === "missing" ? (
+                              <p className="text-xs text-slate-600">File not found in storage.</p>
+                            ) : (
+                              <>
+                                <iframe
+                                  title={`Invoice ${invoiceNoLabel} preview`}
+                                  src={`/api/invoices/${inv.id}/file`}
+                                  className="h-80 w-full rounded-md border border-slate-200 bg-white"
+                                />
+                                {detail.fileStatus === "unknown" && (
+                                  <p className="mt-2 text-xs text-slate-500">Checking file availability...</p>
+                                )}
+                              </>
+                            )}
+                          </div>
+                        </div>
+                        <form
+                          className="space-y-3"
+                          onSubmit={(e) => {
+                            e.preventDefault();
+                            void saveDetails(inv.id);
+                          }}
+                        >
+                          <div className="grid gap-3 md:grid-cols-2">
+                            <div className="space-y-1">
+                              <Label className="text-xs font-semibold text-slate-600">Invoice #</Label>
+                              <Input
+                                value={detail.form.invoiceNo}
+                                onChange={(e) => updateDetailForm(inv.id, { invoiceNo: e.target.value })}
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-xs font-semibold text-slate-600">Currency</Label>
+                              <Input
+                                value={detail.form.currencyCode}
+                                onChange={(e) => updateDetailForm(inv.id, { currencyCode: e.target.value })}
+                                placeholder="USD"
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-xs font-semibold text-slate-600">Invoice date</Label>
+                              <DatePicker
+                                value={detail.form.invoiceDate || null}
+                                onChange={(next) => updateDetailForm(inv.id, { invoiceDate: next ?? "" })}
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-xs font-semibold text-slate-600">Due date</Label>
+                              <DatePicker
+                                value={detail.form.dueDate || null}
+                                onChange={(next) => updateDetailForm(inv.id, { dueDate: next ?? "" })}
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-xs font-semibold text-slate-600">Total amount</Label>
+                              <Input
+                                type="number"
+                                step="0.01"
+                                inputMode="decimal"
+                                value={detail.form.totalAmount}
+                                onChange={(e) => updateDetailForm(inv.id, { totalAmount: e.target.value })}
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-xs font-semibold text-slate-600">Tax amount</Label>
+                              <Input
+                                type="number"
+                                step="0.01"
+                                inputMode="decimal"
+                                value={detail.form.taxAmount}
+                                onChange={(e) => updateDetailForm(inv.id, { taxAmount: e.target.value })}
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-xs font-semibold text-slate-600">Net amount</Label>
+                              <Input
+                                type="number"
+                                step="0.01"
+                                inputMode="decimal"
+                                value={detail.form.netAmount}
+                                onChange={(e) => updateDetailForm(inv.id, { netAmount: e.target.value })}
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-xs font-semibold text-slate-600">Vendor name</Label>
+                              <Input
+                                value={detail.form.vendorName}
+                                onChange={(e) => updateDetailForm(inv.id, { vendorName: e.target.value })}
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-xs font-semibold text-slate-600">GST/VAT</Label>
+                              <Input
+                                value={detail.form.gstNumber}
+                                onChange={(e) => updateDetailForm(inv.id, { gstNumber: e.target.value })}
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-xs font-semibold text-slate-600">Customer name</Label>
+                              <Input
+                                value={detail.form.customerName}
+                                onChange={(e) => updateDetailForm(inv.id, { customerName: e.target.value })}
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-xs font-semibold text-slate-600">Payment terms</Label>
+                              <Input
+                                value={detail.form.paymentTerms}
+                                onChange={(e) => updateDetailForm(inv.id, { paymentTerms: e.target.value })}
+                              />
+                            </div>
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-xs font-semibold text-slate-600">Vendor address</Label>
+                            <Textarea
+                              value={detail.form.vendorAddress}
+                              onChange={(e) => updateDetailForm(inv.id, { vendorAddress: e.target.value })}
+                              rows={2}
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-xs font-semibold text-slate-600">Customer address</Label>
+                            <Textarea
+                              value={detail.form.customerAddress}
+                              onChange={(e) => updateDetailForm(inv.id, { customerAddress: e.target.value })}
+                              rows={2}
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-xs font-semibold text-slate-600">Bank details</Label>
+                            <Textarea
+                              value={detail.form.bankAccount}
+                              onChange={(e) => updateDetailForm(inv.id, { bankAccount: e.target.value })}
+                              rows={2}
+                            />
+                          </div>
+                          <div className="flex items-center justify-between gap-3 text-xs">
+                            <div className="text-slate-500">
+                              {detail.saveError && <span className="text-red-600">{detail.saveError}</span>}
+                              {!detail.saveError && detail.saveSuccess && (
+                                <span className="text-emerald-600">{detail.saveSuccess}</span>
+                              )}
+                            </div>
+                            <div className="flex gap-2">
+                              <Button type="button" variant="outline" size="sm" onClick={() => resetDetailsForm(inv.id)}>
+                                Reset
+                              </Button>
+                              <Button
+                                type="submit"
+                                variant="outline"
+                                size="sm"
+                                className="border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                                disabled={detail.saving}
+                              >
+                                {detail.saving ? "Saving..." : "Save changes"}
+                              </Button>
+                            </div>
+                          </div>
+                        </form>
+                      </div>
+                    ) : (
+                      <div className="text-xs text-slate-600">No invoice details loaded.</div>
+                    )}
+                  </div>
+                )}
                 {inv.approvals.length > 0 && (
                   <div className="col-span-7 mt-2 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
                     <div className="font-semibold text-slate-700">History</div>
@@ -442,11 +1050,13 @@ export function InvoiceApprovalPanel({ invoices }: { invoices: InvoiceInput[] })
                 )}
               </li>
             );
-          })}
-          {invoices.length === 0 && <li className="px-3 py-3 text-slate-600">No invoices yet.</li>}
-        </ul>
-      </div>
-    </section>
+              })}
+              {invoices.length === 0 && <li className="px-3 py-3 text-slate-600">No invoices yet.</li>}
+            </ul>
+          </div>
+        </div>
+      </section>
+    </>
   );
 }
 
@@ -457,6 +1067,7 @@ export function GlAccountManager({ glAccounts }: { glAccounts: GlAccountInput[] 
   const [name, setName] = useState("");
   const [type, setType] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const { confirm: requestConfirm, dialog } = useConfirmDialog();
 
   const resetForm = () => {
     setEditingId(null);
@@ -492,7 +1103,13 @@ export function GlAccountManager({ glAccounts }: { glAccounts: GlAccountInput[] 
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Delete this G/L account?")) return;
+    const confirmed = await requestConfirm({
+      title: "Delete G/L account",
+      message: "Delete this G/L account?",
+      confirmLabel: "Delete account",
+      destructive: true,
+    });
+    if (!confirmed) return;
     try {
       const res = await fetch(`/api/gl-accounts/${id}`, { method: "DELETE" });
       if (!res.ok) throw new Error("Failed to delete G/L account");
@@ -504,7 +1121,9 @@ export function GlAccountManager({ glAccounts }: { glAccounts: GlAccountInput[] 
   };
 
   return (
-    <div className="grid gap-4 lg:grid-cols-3">
+    <>
+      {dialog}
+      <div className="grid gap-4 lg:grid-cols-3">
       <div className="lg:col-span-2 overflow-hidden rounded-xl border border-slate-200 bg-white">
         <div className="grid grid-cols-3 bg-slate-50 px-3 py-2 text-xs font-semibold uppercase text-slate-600">
           <span>No</span>
@@ -518,12 +1137,17 @@ export function GlAccountManager({ glAccounts }: { glAccounts: GlAccountInput[] 
               <div className="text-slate-800">{g.name}</div>
               <div className="text-right text-slate-700">{g.type ?? "—"}</div>
               <div className="col-span-3 mt-2 flex gap-2 text-xs">
-                <button className="text-slate-700 underline underline-offset-4" onClick={() => handleEdit(g)}>
+                <Button variant="link" size="sm" className="h-auto p-0 text-slate-700" onClick={() => handleEdit(g)}>
                   Edit
-                </button>
-                <button className="text-red-600 underline underline-offset-4" onClick={() => handleDelete(g.id)}>
+                </Button>
+                <Button
+                  variant="link"
+                  size="sm"
+                  className="h-auto p-0 text-red-600"
+                  onClick={() => handleDelete(g.id)}
+                >
                   Delete
-                </button>
+                </Button>
               </div>
             </li>
           ))}
@@ -538,47 +1162,42 @@ export function GlAccountManager({ glAccounts }: { glAccounts: GlAccountInput[] 
             <p className="text-xs text-slate-600">Manage chart of accounts without NAV</p>
           </div>
           {editingId && (
-            <button type="button" className="text-xs text-slate-600 underline underline-offset-4" onClick={resetForm}>
+            <Button type="button" variant="link" size="sm" className="h-auto p-0 text-slate-600" onClick={resetForm}>
               Cancel edit
-            </button>
+            </Button>
           )}
         </div>
         {error && <p className="text-xs text-red-600">{error}</p>}
         <div className="space-y-1">
-          <label className="text-xs font-semibold text-slate-600">G/L number</label>
-          <input
+          <Label className="text-xs font-semibold text-slate-600">G/L number</Label>
+          <Input
             required
             value={no}
             onChange={(e) => setNo(e.target.value)}
-            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
           />
         </div>
         <div className="space-y-1">
-          <label className="text-xs font-semibold text-slate-600">Name</label>
-          <input
+          <Label className="text-xs font-semibold text-slate-600">Name</Label>
+          <Input
             required
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
           />
         </div>
         <div className="space-y-1">
-          <label className="text-xs font-semibold text-slate-600">Type (optional)</label>
-          <input
+          <Label className="text-xs font-semibold text-slate-600">Type (optional)</Label>
+          <Input
             value={type}
             onChange={(e) => setType(e.target.value)}
-            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
             placeholder="Posting, Heading, Total"
           />
         </div>
-        <button
-          type="submit"
-          className="w-full rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800"
-        >
+        <Button type="submit" className="w-full">
           {editingId ? "Update G/L account" : "Add G/L account"}
-        </button>
+        </Button>
       </form>
-    </div>
+      </div>
+    </>
   );
 }
 
@@ -590,6 +1209,7 @@ export function DimensionManager({ dimensions }: { dimensions: DimensionInput[] 
   const [valueName, setValueName] = useState("");
   const [active, setActive] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { confirm: requestConfirm, dialog } = useConfirmDialog();
 
   const resetForm = () => {
     setEditingId(null);
@@ -627,7 +1247,13 @@ export function DimensionManager({ dimensions }: { dimensions: DimensionInput[] 
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Delete this dimension value?")) return;
+    const confirmed = await requestConfirm({
+      title: "Delete dimension value",
+      message: "Delete this dimension value?",
+      confirmLabel: "Delete value",
+      destructive: true,
+    });
+    if (!confirmed) return;
     try {
       const res = await fetch(`/api/dimensions/${id}`, { method: "DELETE" });
       if (!res.ok) throw new Error("Failed to delete dimension value");
@@ -639,7 +1265,9 @@ export function DimensionManager({ dimensions }: { dimensions: DimensionInput[] 
   };
 
   return (
-    <div className="grid gap-4 lg:grid-cols-3">
+    <>
+      {dialog}
+      <div className="grid gap-4 lg:grid-cols-3">
       <div className="lg:col-span-2 overflow-hidden rounded-xl border border-slate-200 bg-white">
         <div className="grid grid-cols-4 bg-slate-50 px-3 py-2 text-xs font-semibold uppercase text-slate-600">
           <span>Code</span>
@@ -655,12 +1283,17 @@ export function DimensionManager({ dimensions }: { dimensions: DimensionInput[] 
               <div className="text-slate-800">{d.valueName}</div>
               <div className="text-right text-slate-700">{d.active ? "Yes" : "No"}</div>
               <div className="col-span-4 mt-2 flex gap-2 text-xs">
-                <button className="text-slate-700 underline underline-offset-4" onClick={() => handleEdit(d)}>
+                <Button variant="link" size="sm" className="h-auto p-0 text-slate-700" onClick={() => handleEdit(d)}>
                   Edit
-                </button>
-                <button className="text-red-600 underline underline-offset-4" onClick={() => handleDelete(d.id)}>
+                </Button>
+                <Button
+                  variant="link"
+                  size="sm"
+                  className="h-auto p-0 text-red-600"
+                  onClick={() => handleDelete(d.id)}
+                >
                   Delete
-                </button>
+                </Button>
               </div>
             </li>
           ))}
@@ -675,53 +1308,48 @@ export function DimensionManager({ dimensions }: { dimensions: DimensionInput[] 
             <p className="text-xs text-slate-600">Create dimension codes and values locally</p>
           </div>
           {editingId && (
-            <button type="button" className="text-xs text-slate-600 underline underline-offset-4" onClick={resetForm}>
+            <Button type="button" variant="link" size="sm" className="h-auto p-0 text-slate-600" onClick={resetForm}>
               Cancel edit
-            </button>
+            </Button>
           )}
         </div>
         {error && <p className="text-xs text-red-600">{error}</p>}
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1">
-            <label className="text-xs font-semibold text-slate-600">Code</label>
-            <input
+            <Label className="text-xs font-semibold text-slate-600">Code</Label>
+            <Input
               required
               value={code}
               onChange={(e) => setCode(e.target.value)}
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
             />
           </div>
           <div className="space-y-1">
-            <label className="text-xs font-semibold text-slate-600">Value code</label>
-            <input
+            <Label className="text-xs font-semibold text-slate-600">Value code</Label>
+            <Input
               required
               value={valueCode}
               onChange={(e) => setValueCode(e.target.value)}
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
             />
           </div>
         </div>
         <div className="space-y-1">
-          <label className="text-xs font-semibold text-slate-600">Value name</label>
-          <input
+          <Label className="text-xs font-semibold text-slate-600">Value name</Label>
+          <Input
             required
             value={valueName}
             onChange={(e) => setValueName(e.target.value)}
-            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
           />
         </div>
         <label className="flex items-center gap-2 text-sm text-slate-700">
-          <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} />
+          <Checkbox checked={active} onCheckedChange={(checked) => setActive(Boolean(checked))} />
           Active
         </label>
-        <button
-          type="submit"
-          className="w-full rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800"
-        >
+        <Button type="submit" className="w-full">
           {editingId ? "Update dimension value" : "Add dimension value"}
-        </button>
+        </Button>
       </form>
-    </div>
+      </div>
+    </>
   );
 }
 
@@ -761,6 +1389,7 @@ export function RuleManager({
   const [aiNotes, setAiNotes] = useState<string[]>([]);
   const [aiWarnings, setAiWarnings] = useState<string[]>([]);
   const [aiBusy, setAiBusy] = useState<boolean>(false);
+  const { confirm: requestConfirm, dialog } = useConfirmDialog();
 
   const resetForm = () => {
     setEditingId(null);
@@ -873,7 +1502,13 @@ export function RuleManager({
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Delete this rule?")) return;
+    const confirmed = await requestConfirm({
+      title: "Delete rule",
+      message: "Delete this rule?",
+      confirmLabel: "Delete rule",
+      destructive: true,
+    });
+    if (!confirmed) return;
     try {
       const res = await fetch(`/api/vendor-rules/${id}`, { method: "DELETE" });
       if (!res.ok) throw new Error("Failed to delete rule");
@@ -885,7 +1520,9 @@ export function RuleManager({
   };
 
   return (
-    <div className="grid gap-4 lg:grid-cols-3">
+    <>
+      {dialog}
+      <div className="grid gap-4 lg:grid-cols-3">
       <div className="lg:col-span-2 overflow-hidden rounded-xl border border-slate-200 bg-white">
         <div className="grid grid-cols-7 bg-slate-50 px-3 py-2 text-xs font-semibold uppercase text-slate-600">
           <span>Priority</span>
@@ -918,12 +1555,17 @@ export function RuleManager({
                 )}
               </div>
               <div className="col-span-7 mt-2 flex gap-2 text-xs">
-                <button className="text-slate-700 underline underline-offset-4" onClick={() => handleEdit(r)}>
+                <Button variant="link" size="sm" className="h-auto p-0 text-slate-700" onClick={() => handleEdit(r)}>
                   Edit
-                </button>
-                <button className="text-red-600 underline underline-offset-4" onClick={() => handleDelete(r.id)}>
+                </Button>
+                <Button
+                  variant="link"
+                  size="sm"
+                  className="h-auto p-0 text-red-600"
+                  onClick={() => handleDelete(r.id)}
+                >
                   Delete
-                </button>
+                </Button>
               </div>
             </li>
           ))}
@@ -939,14 +1581,14 @@ export function RuleManager({
               <p className="text-xs text-slate-600">Write instructions in plain English, preview, then save.</p>
             </div>
             {aiDraftRules?.length ? (
-              <button type="button" className="text-xs text-slate-600 underline underline-offset-4" onClick={resetAi}>
+              <Button type="button" variant="link" size="sm" className="h-auto p-0 text-slate-600" onClick={resetAi}>
                 Clear
-              </button>
+              </Button>
             ) : null}
           </div>
 
           <div className="space-y-1">
-            <label className="text-xs font-semibold text-slate-600">Vendor</label>
+            <Label className="text-xs font-semibold text-slate-600">Vendor</Label>
             <Select value={vendorId} onValueChange={setVendorId} disabled={vendors.length === 0 || aiBusy}>
               <SelectTrigger className="w-full">
                 <SelectValue placeholder={vendors.length === 0 ? "No vendors available" : "Choose vendor"} />
@@ -962,11 +1604,10 @@ export function RuleManager({
           </div>
 
           <div className="space-y-1">
-            <label className="text-xs font-semibold text-slate-600">Instructions</label>
-            <textarea
+            <Label className="text-xs font-semibold text-slate-600">Instructions</Label>
+            <Textarea
               value={aiInstruction}
               onChange={(e) => setAiInstruction(e.target.value)}
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
               rows={4}
               placeholder={`Example: "If description contains 'freight' or 'shipping', use GL 6210. Otherwise use GL 6000 and set DEPARTMENT=OPS."`}
               disabled={aiBusy}
@@ -989,22 +1630,12 @@ export function RuleManager({
           ) : null}
 
           <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={generateAiRules}
-              disabled={aiBusy || vendors.length === 0}
-              className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
-            >
+            <Button type="button" onClick={generateAiRules} disabled={aiBusy || vendors.length === 0}>
               {aiBusy ? "Working…" : "Generate rules"}
-            </button>
-            <button
-              type="button"
-              onClick={saveAiRules}
-              disabled={aiBusy || !aiDraftRules?.length}
-              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50 disabled:opacity-50"
-            >
+            </Button>
+            <Button type="button" variant="outline" onClick={saveAiRules} disabled={aiBusy || !aiDraftRules?.length}>
               Save rules
-            </button>
+            </Button>
           </div>
 
           {aiDraftRules?.length ? (
@@ -1034,14 +1665,14 @@ export function RuleManager({
             <p className="text-xs text-slate-600">Set Continia-style vendor rules</p>
           </div>
           {editingId && (
-            <button type="button" className="text-xs text-slate-600 underline underline-offset-4" onClick={resetForm}>
+            <Button type="button" variant="link" size="sm" className="h-auto p-0 text-slate-600" onClick={resetForm}>
               Cancel edit
-            </button>
+            </Button>
           )}
         </div>
         {error && <p className="text-xs text-red-600">{error}</p>}
         <div className="space-y-1">
-          <label className="text-xs font-semibold text-slate-600">Vendor</label>
+          <Label className="text-xs font-semibold text-slate-600">Vendor</Label>
           <Select value={vendorId} onValueChange={setVendorId} disabled={vendors.length === 0}>
             <SelectTrigger className="w-full">
               <SelectValue placeholder={vendors.length === 0 ? "No vendors available" : "Choose vendor"} />
@@ -1057,16 +1688,15 @@ export function RuleManager({
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1">
-            <label className="text-xs font-semibold text-slate-600">Priority</label>
-            <input
+            <Label className="text-xs font-semibold text-slate-600">Priority</Label>
+            <Input
               type="number"
               value={priority}
               onChange={(e) => setPriority(Number(e.target.value))}
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
             />
           </div>
           <div className="space-y-1">
-            <label className="text-xs font-semibold text-slate-600">Match type</label>
+            <Label className="text-xs font-semibold text-slate-600">Match type</Label>
             <Select value={matchType} onValueChange={(value) => setMatchType(value as MatchType)}>
               <SelectTrigger className="w-full">
                 <SelectValue />
@@ -1085,16 +1715,15 @@ export function RuleManager({
           </div>
         </div>
         <div className="space-y-1">
-          <label className="text-xs font-semibold text-slate-600">Match value</label>
-          <input
+          <Label className="text-xs font-semibold text-slate-600">Match value</Label>
+          <Input
             value={matchValue}
             onChange={(e) => setMatchValue(e.target.value)}
-            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
             placeholder="comma-separated tokens or regex"
           />
         </div>
         <div className="space-y-1">
-          <label className="text-xs font-semibold text-slate-600">G/L account</label>
+          <Label className="text-xs font-semibold text-slate-600">G/L account</Label>
           <Select value={glAccountNo} onValueChange={setGlAccountNo} disabled={glAccounts.length === 0}>
             <SelectTrigger className="w-full">
               <SelectValue placeholder={glAccounts.length === 0 ? "No G/L accounts available" : "Choose G/L account"} />
@@ -1110,36 +1739,31 @@ export function RuleManager({
           </Select>
         </div>
         <div className="space-y-1">
-          <label className="text-xs font-semibold text-slate-600">Dimension overrides (JSON)</label>
-          <textarea
+          <Label className="text-xs font-semibold text-slate-600">Dimension overrides (JSON)</Label>
+          <Textarea
             value={dimensionOverrides}
             onChange={(e) => setDimensionOverrides(e.target.value)}
-            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
             rows={3}
             placeholder='{"DEPARTMENT":"OPS"}'
           />
         </div>
         <div className="space-y-1">
-          <label className="text-xs font-semibold text-slate-600">Comment</label>
-          <input
+          <Label className="text-xs font-semibold text-slate-600">Comment</Label>
+          <Input
             value={comment}
             onChange={(e) => setComment(e.target.value)}
-            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
           />
         </div>
         <label className="flex items-center gap-2 text-sm text-slate-700">
-          <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} />
+          <Checkbox checked={active} onCheckedChange={(checked) => setActive(Boolean(checked))} />
           Active
         </label>
-        <button
-          type="submit"
-          className="w-full rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
-          disabled={vendors.length === 0 || glAccounts.length === 0}
-        >
+        <Button type="submit" className="w-full" disabled={vendors.length === 0 || glAccounts.length === 0}>
           {editingId ? "Update rule" : "Add rule"}
-        </button>
+        </Button>
       </form>
       </div>
-    </div>
+      </div>
+    </>
   );
 }

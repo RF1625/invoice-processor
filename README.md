@@ -67,6 +67,17 @@ Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/bui
 - Runs table stores each deterministic rule application: raw invoice JSON, rule matches per line, and the NAV payload used for previewing.
 - Supabase note: for migrations/DDL, prefer the direct DB host (`db.<project>.supabase.co:5432`) over the pooler (`*.pooler.supabase.com:6543`) if you hit disconnects.
 
+## Supabase storage (invoice PDFs)
+
+- Create a **private** bucket named `invoices` (or set `SUPABASE_STORAGE_BUCKET`).
+- Env vars (server-side only):
+  - `SUPABASE_URL`
+  - `SUPABASE_SERVICE_ROLE_KEY`
+  - `SUPABASE_STORAGE_BUCKET` (optional, defaults to `invoices`)
+- Files are stored in Supabase Storage and `files.storage_path` keeps the object key.
+- `GET /api/invoices/:id/file` streams from Storage via a signed URL.
+- Backfill existing local PDFs into Supabase: `npm run storage:backfill` (add `--dry-run` or `--limit=10`).
+
 ## AI vendor rule builder (optional)
 
 You can generate vendor rules from natural language (then review + save) by setting:

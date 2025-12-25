@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
 import { fetchAndCache, readCache } from "@/lib/client-cache";
 import { fetchApprovalsInbox } from "@/lib/nav-prefetch";
 
@@ -157,13 +158,9 @@ export default function ApprovalsInboxPage() {
           </div>
           <div className="flex items-center gap-3">
             {isRefreshing && <span className="text-xs text-slate-500">Refreshing…</span>}
-            <button
-              type="button"
-              onClick={refresh}
-              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50"
-            >
+            <Button type="button" variant="outline" onClick={refresh}>
               Refresh
-            </button>
+            </Button>
           </div>
         </header>
 
@@ -202,22 +199,24 @@ export default function ApprovalsInboxPage() {
                     </div>
 
                     <div className="flex items-center gap-2">
-                      <button
+                      <Button
                         type="button"
+                        variant="outline"
+                        className="border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
                         onClick={() => act(item, "approved")}
                         disabled={disabled}
-                        className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-800 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         Approve
-                      </button>
-                      <button
+                      </Button>
+                      <Button
                         type="button"
+                        variant="outline"
+                        className="border-red-200 bg-red-50 text-red-800 hover:bg-red-100"
                         onClick={() => act(item, "rejected")}
                         disabled={disabled}
-                        className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-800 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         Reject
-                      </button>
+                      </Button>
                     </div>
                   </div>
 

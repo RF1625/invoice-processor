@@ -145,7 +145,9 @@ export async function analyzeInvoiceBuffer(
   }
 
   if (opts?.fileMeta?.storagePath) {
-    await persistFile(buffer, opts.fileMeta.storagePath);
+    await persistFile(buffer, opts.fileMeta.storagePath, {
+      contentType: opts.fileMeta.contentType ?? "application/pdf",
+    });
   }
 
   const poller = await getClient().beginAnalyzeDocument("prebuilt-invoice", buffer);

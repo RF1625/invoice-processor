@@ -3,6 +3,11 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { Loader2, Plus, RefreshCw, Save } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { DatePicker } from "@/components/ui/date-picker";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const currency = (value?: number | string | null) => {
   const num = typeof value === "string" ? Number(value) : value ?? 0;
@@ -127,15 +132,10 @@ export default function PurchaseOrdersPage() {
             <h1 className="mt-1 text-3xl font-semibold text-slate-900">PO register</h1>
             <p className="mt-2 text-sm text-slate-600">Capture approved POs and keep status aligned with invoices.</p>
           </div>
-          <button
-            type="button"
-            onClick={() => loadData()}
-            disabled={loading}
-            className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-800 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed"
-          >
+          <Button type="button" variant="outline" onClick={() => loadData()} disabled={loading}>
             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
             Refresh
-          </button>
+          </Button>
         </header>
 
         {error && <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">{error}</div>}
@@ -188,93 +188,82 @@ export default function PurchaseOrdersPage() {
             </div>
             <div className="space-y-3 px-5 py-4 text-sm">
               <div className="grid grid-cols-2 gap-3">
-                <label className="space-y-1">
-                  <span className="text-xs font-semibold text-slate-700">PO Number</span>
-                  <input
+                <div className="space-y-1">
+                  <Label className="text-xs font-semibold text-slate-700">PO Number</Label>
+                  <Input
                     value={form.poNumber}
                     onChange={(e) => setForm({ ...form, poNumber: e.target.value })}
-                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-slate-400 focus:outline-none"
                     placeholder="PO-12345"
                   />
-                </label>
-                <label className="space-y-1">
-                  <span className="text-xs font-semibold text-slate-700">Vendor</span>
-                  <select
-                    value={form.vendorId}
-                    onChange={(e) => setForm({ ...form, vendorId: e.target.value })}
-                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-slate-400 focus:outline-none"
-                  >
-                    <option value="">Select vendor</option>
-                    {vendors.map((vendor) => (
-                      <option key={vendor.id} value={vendor.id}>
-                        {vendor.name} ({vendor.vendorNo})
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs font-semibold text-slate-700">Vendor</Label>
+                  <Select value={form.vendorId} onValueChange={(value) => setForm({ ...form, vendorId: value })}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select vendor" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {vendors.map((vendor) => (
+                        <SelectItem key={vendor.id} value={vendor.id}>
+                          {vendor.name} ({vendor.vendorNo})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <label className="space-y-1">
-                  <span className="text-xs font-semibold text-slate-700">Order date</span>
-                  <input
-                    type="date"
-                    value={form.orderDate}
-                    onChange={(e) => setForm({ ...form, orderDate: e.target.value })}
-                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-slate-400 focus:outline-none"
+                <div className="space-y-1">
+                  <Label className="text-xs font-semibold text-slate-700">Order date</Label>
+                  <DatePicker
+                    value={form.orderDate || null}
+                    onChange={(next) => setForm({ ...form, orderDate: next ?? "" })}
                   />
-                </label>
-                <label className="space-y-1">
-                  <span className="text-xs font-semibold text-slate-700">Expected date</span>
-                  <input
-                    type="date"
-                    value={form.expectedDate}
-                    onChange={(e) => setForm({ ...form, expectedDate: e.target.value })}
-                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-slate-400 focus:outline-none"
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs font-semibold text-slate-700">Expected date</Label>
+                  <DatePicker
+                    value={form.expectedDate || null}
+                    onChange={(next) => setForm({ ...form, expectedDate: next ?? "" })}
                   />
-                </label>
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <label className="space-y-1">
-                  <span className="text-xs font-semibold text-slate-700">Currency</span>
-                  <input
+                <div className="space-y-1">
+                  <Label className="text-xs font-semibold text-slate-700">Currency</Label>
+                  <Input
                     value={form.currencyCode}
                     onChange={(e) => setForm({ ...form, currencyCode: e.target.value })}
-                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-slate-400 focus:outline-none"
                     placeholder="USD"
                   />
-                </label>
-                <label className="space-y-1">
-                  <span className="text-xs font-semibold text-slate-700">Notes</span>
-                  <input
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs font-semibold text-slate-700">Notes</Label>
+                  <Input
                     value={form.notes}
                     onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-slate-400 focus:outline-none"
                     placeholder="Internal notes"
                   />
-                </label>
+                </div>
               </div>
 
               <div className="rounded-xl border border-slate-200">
                 <div className="flex items-center justify-between border-b border-slate-100 px-3 py-2 text-xs font-semibold uppercase text-slate-600">
                   <span>Lines</span>
-                  <button
-                    type="button"
-                    onClick={addLine}
-                    className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-800 shadow-sm transition hover:bg-slate-50"
-                  >
+                  <Button type="button" variant="outline" size="sm" onClick={addLine}>
                     <Plus className="h-3 w-3" /> Line
-                  </button>
+                  </Button>
                 </div>
                 <div className="divide-y divide-slate-100">
                   {lines.map((line, idx) => (
                     <div key={idx} className="grid grid-cols-6 gap-2 px-3 py-2 text-xs">
-                      <input
+                      <Input
                         value={line.description}
                         onChange={(e) => updateLine(idx, { description: e.target.value })}
                         placeholder="Description"
                         className="col-span-2 rounded-lg border border-slate-200 px-2 py-1"
                       />
-                      <input
+                      <Input
                         type="number"
                         min="0"
                         value={line.quantity}
@@ -282,7 +271,7 @@ export default function PurchaseOrdersPage() {
                         className="rounded-lg border border-slate-200 px-2 py-1"
                         placeholder="Qty"
                       />
-                      <input
+                      <Input
                         type="number"
                         min="0"
                         value={line.unitCost}
@@ -290,19 +279,21 @@ export default function PurchaseOrdersPage() {
                         className="rounded-lg border border-slate-200 px-2 py-1"
                         placeholder="Unit cost"
                       />
-                      <input
+                      <Input
                         value={line.glAccountNo ?? ""}
                         onChange={(e) => updateLine(idx, { glAccountNo: e.target.value })}
                         className="rounded-lg border border-slate-200 px-2 py-1"
                         placeholder="G/L"
                       />
-                      <button
+                      <Button
                         type="button"
+                        variant="link"
+                        size="sm"
+                        className="h-auto p-0 text-red-600"
                         onClick={() => removeLine(idx)}
-                        className="text-xs font-semibold text-red-600 transition hover:text-red-700"
                       >
                         Remove
-                      </button>
+                      </Button>
                     </div>
                   ))}
                 </div>
@@ -312,15 +303,10 @@ export default function PurchaseOrdersPage() {
                 </div>
               </div>
 
-              <button
-                type="button"
-                onClick={submit}
-                disabled={submitting}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 disabled:cursor-not-allowed"
-              >
+              <Button type="button" onClick={submit} disabled={submitting} className="w-full gap-2">
                 {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                 Save PO
-              </button>
+              </Button>
             </div>
           </div>
         </section>

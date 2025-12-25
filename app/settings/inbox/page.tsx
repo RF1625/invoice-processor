@@ -3,6 +3,9 @@
 import Link from "next/link";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { fetchAndCache, readCache } from "@/lib/client-cache";
 import { fetchMailboxes } from "@/lib/nav-prefetch";
 
@@ -373,13 +376,14 @@ function InboxContent() {
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
-                <button
+                <Button
                   type="button"
+                  variant="outline"
+                  size="sm"
                   onClick={() => summaryMailboxId && fetchSummary(summaryMailboxId)}
-                  className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50"
                 >
                   Re-check
-                </button>
+                </Button>
               </div>
             </div>
 
@@ -406,42 +410,46 @@ function InboxContent() {
             )}
 
             <div className="mt-4 grid gap-3 md:grid-cols-2">
-              <button
+              <Button
                 type="button"
+                variant="outline"
                 onClick={() => handleSummaryAction("new")}
                 disabled={summaryAction !== null}
-                className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-left text-sm font-semibold text-slate-900 shadow-sm hover:bg-slate-100 disabled:opacity-60"
+                className="h-auto w-full justify-between border-slate-200 bg-slate-50 px-4 py-3 text-left text-sm font-semibold text-slate-900 shadow-sm hover:bg-slate-100"
               >
                 <span>Only new from now</span>
                 <span className="text-xs font-medium text-slate-600">Set checkpoint</span>
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
+                variant="outline"
                 onClick={() => handleSummaryAction("samples")}
                 disabled={summaryAction !== null}
-                className="flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-left text-sm font-semibold text-emerald-800 shadow-sm hover:bg-emerald-100 disabled:opacity-60"
+                className="h-auto w-full justify-between border-emerald-200 bg-emerald-50 px-4 py-3 text-left text-sm font-semibold text-emerald-800 shadow-sm hover:bg-emerald-100"
               >
                 <span>Import 5 samples</span>
                 <span className="text-xs font-medium text-emerald-700">Quick dry-run</span>
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
+                variant="outline"
                 onClick={() => handleSummaryAction("backfill30")}
                 disabled={summaryAction !== null}
-                className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3 text-left text-sm font-semibold text-slate-900 shadow-sm hover:bg-slate-50 disabled:opacity-60"
+                className="h-auto w-full justify-between border-slate-200 bg-white px-4 py-3 text-left text-sm font-semibold text-slate-900 shadow-sm hover:bg-slate-50"
               >
                 <span>Backfill 30 days</span>
                 <span className="text-xs font-medium text-slate-600">One-time import</span>
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
+                variant="outline"
                 onClick={() => handleSummaryAction("backfill90")}
                 disabled={summaryAction !== null}
-                className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3 text-left text-sm font-semibold text-slate-900 shadow-sm hover:bg-slate-50 disabled:opacity-60"
+                className="h-auto w-full justify-between border-slate-200 bg-white px-4 py-3 text-left text-sm font-semibold text-slate-900 shadow-sm hover:bg-slate-50"
               >
                 <span>Backfill 90 days</span>
                 <span className="text-xs font-medium text-slate-600">Larger one-time import</span>
-              </button>
+              </Button>
             </div>
           </section>
         )}
@@ -457,22 +465,19 @@ function InboxContent() {
             </div>
           </div>
           <div className="mt-4 flex flex-col gap-3 sm:flex-row">
-            <button
-              type="button"
-              onClick={() => handleOAuth("google")}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-3 text-sm font-semibold text-white shadow-md transition hover:bg-slate-800 sm:w-auto"
-            >
+            <Button type="button" onClick={() => handleOAuth("google")} className="w-full gap-2 sm:w-auto">
               <span className="h-2 w-2 rounded-full bg-emerald-400" />
               Connect Google
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
+              variant="outline"
               onClick={() => handleOAuth("outlook")}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm transition hover:bg-slate-50 sm:w-auto"
+              className="w-full gap-2 sm:w-auto"
             >
               <span className="h-2 w-2 rounded-full bg-blue-500" />
               Connect Outlook
-            </button>
+            </Button>
           </div>
           <ul className="mt-4 list-disc space-y-1 pl-5 text-sm text-slate-600">
             <li>We request IMAP + email scopes only.</li>
@@ -487,13 +492,9 @@ function InboxContent() {
               <h2 className="text-lg font-semibold text-slate-900">Connected inboxes</h2>
               <p className="text-sm text-slate-600">Run a test or ingest now.</p>
             </div>
-            <button
-              type="button"
-              onClick={() => loadMailboxes()}
-              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50"
-            >
+            <Button type="button" variant="outline" size="sm" onClick={() => loadMailboxes()}>
               Refresh
-            </button>
+            </Button>
           </div>
 
           <div className="mt-4 space-y-3">
@@ -528,22 +529,17 @@ function InboxContent() {
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <button
+                  <Button
                     type="button"
+                    variant="outline"
                     onClick={() => handleTest(mailbox.id)}
                     disabled={testingId === mailbox.id}
-                    className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-800 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-100"
                   >
                     {testingId === mailbox.id ? "Testing..." : "Test connection"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleIngest(mailbox.id)}
-                    disabled={ingestingId === mailbox.id}
-                    className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
-                  >
+                  </Button>
+                  <Button type="button" onClick={() => handleIngest(mailbox.id)} disabled={ingestingId === mailbox.id}>
                     {ingestingId === mailbox.id ? "Ingesting..." : "Run ingest now"}
-                  </button>
+                  </Button>
                 </div>
               </div>
             ))}
@@ -559,13 +555,10 @@ function LabeledInput({
   ...props
 }: React.InputHTMLAttributes<HTMLInputElement> & { label: string }) {
   return (
-    <label className="flex flex-col gap-1 text-sm font-medium text-slate-700">
-      {label}
-      <input
-        {...props}
-        className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-900/10"
-      />
-    </label>
+    <div className="flex flex-col gap-1 text-sm font-medium text-slate-700">
+      <Label>{label}</Label>
+      <Input {...props} />
+    </div>
   );
 }
 

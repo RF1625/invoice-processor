@@ -3,6 +3,9 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 export default function SignupPage() {
   const router = useRouter();
@@ -48,63 +51,55 @@ export default function SignupPage() {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <label className="block space-y-1 text-sm font-medium text-slate-700">
-            <span>Work email</span>
-            <input
+          <div className="space-y-1">
+            <Label>Work email</Label>
+            <Input
               type="email"
               autoComplete="email"
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-slate-400 focus:outline-none"
             />
-          </label>
+          </div>
 
-          <label className="block space-y-1 text-sm font-medium text-slate-700">
-            <span>Your name</span>
-            <input
+          <div className="space-y-1">
+            <Label>Your name</Label>
+            <Input
               type="text"
               autoComplete="name"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-slate-400 focus:outline-none"
             />
-          </label>
+          </div>
 
-          <label className="block space-y-1 text-sm font-medium text-slate-700">
-            <span>Company / firm name</span>
-            <input
+          <div className="space-y-1">
+            <Label>Company / firm name</Label>
+            <Input
               type="text"
               required
               value={firmName}
               onChange={(e) => setFirmName(e.target.value)}
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-slate-400 focus:outline-none"
             />
-          </label>
+          </div>
 
-          <label className="block space-y-1 text-sm font-medium text-slate-700">
-            <span>Password</span>
-            <input
+          <div className="space-y-1">
+            <Label>Password</Label>
+            <Input
               type="password"
               autoComplete="new-password"
               required
               minLength={8}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-slate-400 focus:outline-none"
             />
             <span className="text-xs font-normal text-slate-500">At least 8 characters.</span>
-          </label>
+          </div>
 
           {error && <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>}
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="inline-flex w-full items-center justify-center rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-md transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
-          >
+          <Button type="submit" disabled={loading} className="w-full">
             {loading ? "Creating account…" : "Create account"}
-          </button>
+          </Button>
         </form>
 
         <div className="flex items-center justify-between text-sm text-slate-700">

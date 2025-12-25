@@ -2,33 +2,47 @@ import { Pool, type PoolClient, type PoolConfig } from "pg";
 
 let pool: Pool | null = null;
 
+const stripSslParams = (value: string) => {
+  try {
+    const url = new URL(value);
+    url.searchParams.delete("sslmode");
+    url.searchParams.delete("ssl");
+    return url.toString();
+  } catch {
+    return value;
+  }
+};
+
 const createPool = () => {
-  const connectionString = process.env.DATABASE_URL;
-  if (!connectionString) {
+  const rawConnectionString = process.env.DATABASE_URL;
+  if (!rawConnectionString) {
     throw new Error("DATABASE_URL is not set");
   }
 
-  const config: PoolConfig = { connectionString };
+  const pgssl = (process.env.PGSSL ?? "").toLowerCase();
+  const sslMode = (process.env.PGSSLMODE ?? "").toLowerCase();
+  const sslExplicitlyDisabled = pgssl === "false" || sslMode === "disable";
+  const sslExplicitlyEnabled =
+    pgssl === "true" ||
+    sslMode === "require" ||
+    sslMode === "verify-ca" ||
+    sslMode === "verify-full" ||
+    sslMode === "prefer" ||
+    sslMode === "no-verify";
+  const sslFromUrlEnabled =
+    /[?&]sslmode=(require|verify-full|verify-ca|prefer|no-verify)/i.test(rawConnectionString) ||
+    /[?&]ssl=true/i.test(rawConnectionString);
+  const sslFromUrlDisabled =
+    /[?&]sslmode=disable/i.test(rawConnectionString) || /[?&]ssl=false/i.test(rawConnectionString);
+  const shouldUseSsl = sslExplicitlyDisabled ? false : sslExplicitlyEnabled ? true : sslFromUrlDisabled ? false : sslFromUrlEnabled;
+  const allowSelfSigned =
+    process.env.PGSSL_ALLOW_SELF_SIGNED === "true" || sslMode === "no-verify" || process.env.NODE_ENV !== "production";
 
-  // Enable SSL when explicitly requested or implied by the connection string (e.g., sslmode=require for Supabase)
-  let sslFromUrl = false;
-  try {
-    const url = new URL(connectionString);
-    const sslMode = url.searchParams.get("sslmode")?.toLowerCase();
-    const sslFlag = url.searchParams.get("ssl")?.toLowerCase();
-    sslFromUrl =
-      sslFlag === "true" ||
-      sslMode === "require" ||
-      sslMode === "prefer" ||
-      sslMode === "verify-ca" ||
-      sslMode === "verify-full";
-  } catch {
-    // Ignore malformed URL; fall back to env flag.
-  }
-
-  if (process.env.PGSSL === "true" || sslFromUrl) {
-    config.ssl = { rejectUnauthorized: false };
-  }
+  const connectionString = stripSslParams(rawConnectionString);
+  const config: PoolConfig = {
+    connectionString,
+    ssl: shouldUseSsl ? { rejectUnauthorized: !allowSelfSigned } : false,
+  };
 
   return new Pool(config);
 };

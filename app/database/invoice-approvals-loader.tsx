@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Button } from "@/components/ui/button";
 import { InvoiceApprovalPanel } from "./forms";
 
 type InvoiceApprovalInput = { id: string; status: string; comment?: string | null; actedAt?: string | null; createdAt: string };
@@ -86,16 +87,17 @@ export function InvoiceApprovalsLoader() {
             <h2 className="text-lg font-semibold text-slate-900">Invoices & approvals</h2>
             <p className="text-xs text-slate-700">Couldn&apos;t load invoices right now.</p>
           </div>
-          <button
+          <Button
             type="button"
+            variant="outline"
+            size="sm"
             onClick={() => {
               setInvoices([]);
               void fetchInvoices();
             }}
-            className="rounded-md border border-slate-300 px-3 py-1 text-xs font-semibold text-slate-800 hover:bg-white"
           >
             Retry
-          </button>
+          </Button>
         </div>
         <p className="mt-2 text-xs">{error}</p>
       </section>

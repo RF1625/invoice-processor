@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
 import { CheckSquare, Database, Home, Inbox, LayoutDashboard, LogIn, LogOut, Settings, UploadCloud } from "lucide-react";
 import { prefetchNavData, prefetchNavDataForHref } from "@/lib/nav-prefetch";
 
@@ -140,18 +141,19 @@ export function SiteNavClient({ isAuthenticated }: { isAuthenticated: boolean })
             const isLogout = isAuthenticated && link.href === "/logout";
 
             return isLogout ? (
-              <button
+              <Button
                 key="logout"
                 type="button"
+                variant={active ? "default" : "ghost"}
+                className={`gap-2 ${active ? "" : "text-slate-700 hover:bg-slate-100 hover:text-slate-900"} ${
+                  loggingOut ? "opacity-70" : ""
+                }`}
                 onClick={handleLogout}
                 disabled={loggingOut}
-                className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition ${
-                  active ? "bg-slate-900 text-white" : "text-slate-700 hover:bg-slate-100 hover:text-slate-900"
-                } ${loggingOut ? "opacity-70" : ""}`}
               >
                 <link.icon className="h-4 w-4" />
                 {loggingOut ? "Logging out…" : link.label}
-              </button>
+              </Button>
             ) : (
               <Link
                 key={link.href}

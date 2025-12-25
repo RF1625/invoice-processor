@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { AlertCircle, CheckCircle2, Loader2, UploadCloud } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 type ApiResult = {
   invoice?: {
@@ -89,7 +91,7 @@ export default function UploadPage() {
                 <p className="text-sm font-semibold text-slate-900">Drop a file or click to browse</p>
                 <p className="text-xs text-slate-600">PDF or image, up to 10MB.</p>
               </div>
-              <input
+              <Input
                 type="file"
                 accept=".pdf,image/*"
                 className="sr-only"
@@ -99,17 +101,14 @@ export default function UploadPage() {
             </label>
 
             <div className="flex items-center gap-3">
-              <button
-                type="submit"
-                disabled={loading}
-                className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
-              >
+              <Button type="submit" disabled={loading}>
                 {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
                 {loading ? "Analyzing…" : "Analyze invoice"}
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
-                className="text-sm font-medium text-slate-700 underline-offset-4 hover:underline"
+                variant="link"
+                className="h-auto p-0 text-sm font-medium text-slate-700"
                 onClick={() => {
                   setFile(null);
                   setResult(null);
@@ -118,7 +117,7 @@ export default function UploadPage() {
                 }}
               >
                 Reset
-              </button>
+              </Button>
             </div>
           </form>
 
