@@ -18,6 +18,33 @@ export type ApprovalSettingsCache = {
   forbidden: boolean;
 };
 
+export type ApprovalInboxItem = {
+  stepId: string;
+  scopeId: string;
+  stepIndex: number;
+  invoice: {
+    id: string;
+    invoiceNo: string | null;
+    status: string;
+    totalAmount: unknown;
+    currencyCode: string | null;
+    invoiceDate: string | null;
+    dueDate: string | null;
+    vendorName: string | null;
+  };
+  scope: {
+    id: string;
+    scopeType: string;
+    scopeKey: string | null;
+    amount: unknown;
+    currencyCode: string | null;
+    requestedAt: string;
+    requester: { id: string; name: string | null; email: string } | null;
+  };
+  approver: { id: string; name: string | null; email: string };
+  actingAsSubstitute: boolean;
+};
+
 type ApiApprovalSetup = {
   approverUserId?: string | null;
   approvalLimit?: unknown;

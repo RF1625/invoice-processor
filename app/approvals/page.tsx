@@ -5,33 +5,9 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { fetchAndCache, readCache } from "@/lib/client-cache";
 import { fetchApprovalsInbox } from "@/lib/nav-prefetch";
+import type { ApprovalInboxItem } from "@/lib/approvals-cache";
 
-type InboxItem = {
-  stepId: string;
-  scopeId: string;
-  stepIndex: number;
-  invoice: {
-    id: string;
-    invoiceNo: string | null;
-    status: string;
-    totalAmount: unknown;
-    currencyCode: string | null;
-    invoiceDate: string | null;
-    dueDate: string | null;
-    vendorName: string | null;
-  };
-  scope: {
-    id: string;
-    scopeType: string;
-    scopeKey: string | null;
-    amount: unknown;
-    currencyCode: string | null;
-    requestedAt: string;
-    requester: { id: string; name: string | null; email: string } | null;
-  };
-  approver: { id: string; name: string | null; email: string };
-  actingAsSubstitute: boolean;
-};
+type InboxItem = ApprovalInboxItem;
 
 const CACHE_KEY = "approvals-inbox-v1";
 const CACHE_TTL_MS = 30_000;

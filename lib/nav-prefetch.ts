@@ -2,7 +2,7 @@
 
 import { fetchAndCache, isStale, readCache } from "@/lib/client-cache";
 import { normalizeDatabaseSnapshot, type DatabaseSnapshot } from "@/lib/database-cache";
-import { normalizeApprovalUsers, type ApprovalSettingsCache } from "@/lib/approvals-cache";
+import { normalizeApprovalUsers, type ApprovalSettingsCache, type ApprovalInboxItem } from "@/lib/approvals-cache";
 import { readJson } from "@/lib/http";
 
 const DASHBOARD_KEY = "dashboard-runs-v1";
@@ -27,9 +27,9 @@ export const fetchDashboardRuns = async () => {
   return json.runs ?? [];
 };
 
-export const fetchApprovalsInbox = async () => {
+export const fetchApprovalsInbox = async (): Promise<ApprovalInboxItem[]> => {
   const res = await fetch("/api/approvals/inbox", { cache: "no-store" });
-  const json = await readJson<{ items?: unknown[]; error?: string }>(res);
+  const json = await readJson<{ items?: ApprovalInboxItem[]; error?: string }>(res);
   if (res.status === 401) throw new Error("Unauthorized");
   if (!res.ok) throw new Error(json.error ?? "Failed to load approvals");
   return json.items ?? [];
