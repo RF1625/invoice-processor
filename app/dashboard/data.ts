@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma"
 import { requireFirmId } from "@/lib/tenant"
 import type { InvoiceInput } from "./types"
 
-const pendingStatuses = ["pending", "pending_approval", "needs_review"] as const
+const pendingStatuses = ["pending", "pending_approval", "needs_review"]
 
 export async function getPendingInvoices(): Promise<InvoiceInput[]> {
   const firmId = await requireFirmId()
