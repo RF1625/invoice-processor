@@ -75,7 +75,9 @@ export default function PurchaseOrderDetailPage() {
       const res = await fetch(`/api/purchase-orders/${params.id}`, { cache: "no-store" });
       const json = await readJson<{ purchaseOrder?: PurchaseOrder; error?: string }>(res);
       if (!res.ok) throw new Error(json.error ?? "Failed to load PO");
-      const normalizedLines: Line[] = (json.purchaseOrder.lines ?? []).map((line: Line) => ({
+      const purchaseOrder = json.purchaseOrder;
+      if (!purchaseOrder) throw new Error("Purchase order not found");
+      const normalizedLines: Line[] = (purchaseOrder.lines ?? []).map((line: Line) => ({
         ...line,
         quantity: Number(line.quantity) || 0,
         unitCost: Number(line.unitCost) || 0,
@@ -83,7 +85,7 @@ export default function PurchaseOrderDetailPage() {
         receivedQuantity: Number(line.receivedQuantity) || 0,
         invoicedQuantity: Number(line.invoicedQuantity) || 0,
       }));
-      setPurchaseOrder({ ...json.purchaseOrder, lines: normalizedLines });
+      setPurchaseOrder({ ...purchaseOrder, lines: normalizedLines });
       setLines(normalizedLines);
       if (normalizedLines.length) {
         setReceiptForm((prev) => ({ ...prev, purchaseOrderLineId: normalizedLines[0].id }));
@@ -133,7 +135,9 @@ export default function PurchaseOrderDetailPage() {
       });
       const json = await readJson<{ purchaseOrder?: PurchaseOrder; error?: string }>(res);
       if (!res.ok) throw new Error(json.error ?? "Failed to save lines");
-      const normalizedLines: Line[] = (json.purchaseOrder?.lines ?? []).map((line: Line) => ({
+      const updatedOrder = json.purchaseOrder;
+      if (!updatedOrder) throw new Error("Failed to save lines");
+      const normalizedLines: Line[] = (updatedOrder.lines ?? []).map((line: Line) => ({
         ...line,
         quantity: Number(line.quantity) || 0,
         unitCost: Number(line.unitCost) || 0,
@@ -141,7 +145,7 @@ export default function PurchaseOrderDetailPage() {
         receivedQuantity: Number(line.receivedQuantity) || 0,
         invoicedQuantity: Number(line.invoicedQuantity) || 0,
       }));
-      setPurchaseOrder({ ...json.purchaseOrder, lines: normalizedLines });
+      setPurchaseOrder({ ...updatedOrder, lines: normalizedLines });
       setLines(normalizedLines);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save lines");
@@ -170,7 +174,9 @@ export default function PurchaseOrderDetailPage() {
       });
       const json = await readJson<{ purchaseOrder?: PurchaseOrder; error?: string }>(res);
       if (!res.ok) throw new Error(json.error ?? "Failed to add receipt");
-      const normalizedLines: Line[] = (json.purchaseOrder?.lines ?? []).map((line: Line) => ({
+      const updatedOrder = json.purchaseOrder;
+      if (!updatedOrder) throw new Error("Failed to add receipt");
+      const normalizedLines: Line[] = (updatedOrder.lines ?? []).map((line: Line) => ({
         ...line,
         quantity: Number(line.quantity) || 0,
         unitCost: Number(line.unitCost) || 0,
@@ -178,7 +184,7 @@ export default function PurchaseOrderDetailPage() {
         receivedQuantity: Number(line.receivedQuantity) || 0,
         invoicedQuantity: Number(line.invoicedQuantity) || 0,
       }));
-      setPurchaseOrder({ ...json.purchaseOrder, lines: normalizedLines });
+      setPurchaseOrder({ ...updatedOrder, lines: normalizedLines });
       setLines(normalizedLines);
       setReceiptForm({ purchaseOrderLineId: normalizedLines[0]?.id ?? "", quantity: 0, receiptDate: "", note: "" });
     } catch (err) {

@@ -7,33 +7,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { fetchAndCache, readCache } from "@/lib/client-cache";
-import { fetchMailboxes } from "@/lib/nav-prefetch";
+import { fetchMailboxes, type MailboxRow } from "@/lib/nav-prefetch";
 import { readJson } from "@/lib/http";
 
 const DEFAULT_MAX_MESSAGES = 10;
 const DEFAULT_SUBJECT_KEYWORDS = ["invoice", "bill", "payment", "statement"];
 const CACHE_KEY = "inbox-mailboxes-v1";
 const CACHE_TTL_MS = 60_000;
-
-type MailboxRow = {
-  id: string;
-  provider: string;
-  imapHost?: string | null;
-  imapPort?: number | null;
-  imapTls?: boolean | null;
-  imapUser?: string | null;
-  allowedSenders?: string | null;
-  subjectKeywords?: string | null;
-  sourceMailbox?: string | null;
-  processedMailbox?: string | null;
-  maxMessages?: number | null;
-  active: boolean;
-  lastRunAt?: string | null;
-  lastSeenUid?: number | null;
-  hasSecret?: boolean;
-  createdAt?: string | null;
-  updatedAt?: string | null;
-};
 
 const defaultKeywords = DEFAULT_SUBJECT_KEYWORDS.join(",");
 

@@ -45,7 +45,7 @@ export type ApprovalInboxItem = {
   actingAsSubstitute: boolean;
 };
 
-type ApiApprovalSetup = {
+export type ApiApprovalSetup = {
   approverUserId?: string | null;
   approvalLimit?: unknown;
   substituteUserId?: string | null;
@@ -54,7 +54,7 @@ type ApiApprovalSetup = {
   active?: boolean | null;
 };
 
-type ApiApprovalUser = {
+export type ApiApprovalUser = {
   userId: string;
   role: string;
   email: string;

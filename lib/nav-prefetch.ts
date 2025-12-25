@@ -2,7 +2,7 @@
 
 import { fetchAndCache, isStale, readCache } from "@/lib/client-cache";
 import { normalizeDatabaseSnapshot, type DatabaseSnapshot } from "@/lib/database-cache";
-import { normalizeApprovalUsers, type ApprovalSettingsCache, type ApprovalInboxItem } from "@/lib/approvals-cache";
+import { normalizeApprovalUsers, type ApprovalSettingsCache, type ApprovalInboxItem, type ApiApprovalUser } from "@/lib/approvals-cache";
 import { readJson } from "@/lib/http";
 
 const DASHBOARD_KEY = "dashboard-runs-v1";
@@ -16,6 +16,26 @@ const APPROVALS_TTL_MS = 30_000;
 const INBOX_TTL_MS = 60_000;
 const DATABASE_TTL_MS = 120_000;
 const APPROVAL_SETTINGS_TTL_MS = 60_000;
+
+export type MailboxRow = {
+  id: string;
+  provider: string;
+  imapHost?: string | null;
+  imapPort?: number | null;
+  imapTls?: boolean | null;
+  imapUser?: string | null;
+  allowedSenders?: string | null;
+  subjectKeywords?: string | null;
+  sourceMailbox?: string | null;
+  processedMailbox?: string | null;
+  maxMessages?: number | null;
+  active: boolean;
+  lastRunAt?: string | null;
+  lastSeenUid?: number | null;
+  hasSecret?: boolean;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+};
 
 const shouldPrefetch = (key: string, maxAgeMs: number) => isStale(readCache(key), maxAgeMs);
 
@@ -35,9 +55,9 @@ export const fetchApprovalsInbox = async (): Promise<ApprovalInboxItem[]> => {
   return json.items ?? [];
 };
 
-export const fetchMailboxes = async () => {
+export const fetchMailboxes = async (): Promise<MailboxRow[]> => {
   const res = await fetch("/api/mailboxes", { cache: "no-store" });
-  const json = await readJson<{ mailboxes?: unknown[]; error?: string }>(res);
+  const json = await readJson<{ mailboxes?: MailboxRow[]; error?: string }>(res);
   if (res.status === 401) throw new Error("Unauthorized");
   if (!res.ok) throw new Error(json.error ?? "Failed to load mailboxes");
   return json.mailboxes ?? [];
@@ -45,7 +65,7 @@ export const fetchMailboxes = async () => {
 
 export const fetchApprovalSettings = async (): Promise<ApprovalSettingsCache> => {
   const res = await fetch("/api/approval-setups", { cache: "no-store" });
-  const json = await readJson<{ users?: unknown[]; error?: string }>(res);
+  const json = await readJson<{ users?: ApiApprovalUser[]; error?: string }>(res);
   if (res.status === 401) throw new Error("Unauthorized");
   if (res.status === 403) return { users: [], forbidden: true };
   if (!res.ok) throw new Error(json.error ?? "Failed to load approval setups");
